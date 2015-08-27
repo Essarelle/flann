@@ -191,7 +191,7 @@ public:
      * \param[in] knn Number of nearest neighbors to return
      * \param[in] params Search parameters
      */
-    int knnSearch(const Matrix<ElementType>& queries, Matrix<int>& indices, Matrix<DistanceType>& dists, size_t knn, const SearchParams& params) const
+    virtual int knnSearch(const Matrix<ElementType>& queries, Matrix<int>& indices, Matrix<DistanceType>& dists, size_t knn, const SearchParams& params) const
     {
     	knnSearchGpu(queries,indices, dists, knn, params);
         return knn*queries.rows; // hack...
@@ -205,7 +205,7 @@ public:
      * \param[in] knn Number of nearest neighbors to return
      * \param[in] params Search parameters
      */
-    int knnSearch(const Matrix<ElementType>& queries,
+	virtual int knnSearch(const Matrix<ElementType>& queries,
                           std::vector< std::vector<int> >& indices,
                           std::vector<std::vector<DistanceType> >& dists,
                           size_t knn,
@@ -223,9 +223,9 @@ public:
      * \param[in] knn Number of nearest neighbors to return
      * \param[in] params Search parameters
      */
-    void knnSearchGpu(const Matrix<ElementType>& queries, Matrix<int>& indices, Matrix<DistanceType>& dists, size_t knn, const SearchParams& params) const;
+	virtual void knnSearchGpu(const Matrix<ElementType>& queries, Matrix<int>& indices, Matrix<DistanceType>& dists, size_t knn, const SearchParams& params) const;
 
-    int knnSearchGpu(const Matrix<ElementType>& queries,
+	virtual int knnSearchGpu(const Matrix<ElementType>& queries,
                      std::vector< std::vector<int> >& indices,
                      std::vector<std::vector<DistanceType> >& dists,
                      size_t knn,
@@ -247,29 +247,29 @@ public:
         return knn*queries.rows; // hack...
     }
 
-    int radiusSearch(const Matrix<ElementType>& queries, Matrix<int>& indices, Matrix<DistanceType>& dists,
+	virtual int radiusSearch(const Matrix<ElementType>& queries, Matrix<int>& indices, Matrix<DistanceType>& dists,
                              float radius, const SearchParams& params) const
     {
     	return radiusSearchGpu(queries,indices, dists, radius, params);
     }
 
-    int radiusSearch(const Matrix<ElementType>& queries, std::vector< std::vector<int> >& indices,
+	virtual int radiusSearch(const Matrix<ElementType>& queries, std::vector< std::vector<int> >& indices,
                              std::vector<std::vector<DistanceType> >& dists, float radius, const SearchParams& params) const
     {
     	return radiusSearchGpu(queries,indices, dists, radius, params);
     }
 
-    int radiusSearchGpu(const Matrix<ElementType>& queries, Matrix<int>& indices, Matrix<DistanceType>& dists,
+	virtual int radiusSearchGpu(const Matrix<ElementType>& queries, Matrix<int>& indices, Matrix<DistanceType>& dists,
                         float radius, const SearchParams& params) const;
 
-    int radiusSearchGpu(const Matrix<ElementType>& queries, std::vector< std::vector<int> >& indices,
+	virtual int radiusSearchGpu(const Matrix<ElementType>& queries, std::vector< std::vector<int> >& indices,
                         std::vector<std::vector<DistanceType> >& dists, float radius, const SearchParams& params) const;
 
     /**
      * Not implemented, since it is only used by single-element searches.
      * (but is needed b/c it is abstract in the base class)
      */
-    void findNeighbors(ResultSet<DistanceType>& result, const ElementType* vec, const SearchParams& searchParams) const
+	virtual void findNeighbors(ResultSet<DistanceType>& result, const ElementType* vec, const SearchParams& searchParams) const
     {
     }
 
