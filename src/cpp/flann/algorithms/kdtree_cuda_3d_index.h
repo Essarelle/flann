@@ -45,7 +45,7 @@
 #include "flann/util/random.h"
 #include "flann/util/saving.h"
 #include "flann/util/params.h"
-
+#include <cuda_runtime.h>
 namespace flann
 {
 
@@ -223,7 +223,7 @@ public:
      * \param[in] knn Number of nearest neighbors to return
      * \param[in] params Search parameters
      */
-	virtual void knnSearchGpu(const Matrix<ElementType>& queries, Matrix<int>& indices, Matrix<DistanceType>& dists, size_t knn, const SearchParams& params) const;
+	virtual void knnSearchGpu(const Matrix<ElementType>& queries, Matrix<int>& indices, Matrix<DistanceType>& dists, size_t knn, const SearchParams& params, cudaStream_t stream = NULL) const;
 
 	virtual int knnSearchGpu(const Matrix<ElementType>& queries,
                      std::vector< std::vector<int> >& indices,
@@ -260,7 +260,7 @@ public:
     }
 
 	virtual int radiusSearchGpu(const Matrix<ElementType>& queries, Matrix<int>& indices, Matrix<DistanceType>& dists,
-                        float radius, const SearchParams& params) const;
+				float radius, const SearchParams& params) const;
 
 	virtual int radiusSearchGpu(const Matrix<ElementType>& queries, std::vector< std::vector<int> >& indices,
                         std::vector<std::vector<DistanceType> >& dists, float radius, const SearchParams& params) const;

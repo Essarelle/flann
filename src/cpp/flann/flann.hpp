@@ -43,7 +43,10 @@
 #include "flann/util/saving.h"
 
 #include "flann/algorithms/all_indices.h"
-
+#ifdef FLANN_USE_CUDA
+#include "flann/algorithms/kdtree_cuda_3d_index.h"
+#include <cuda_runtime.h>
+#endif
 namespace flann
 {
 
@@ -367,7 +370,7 @@ public:
     	return nnIndex_->radiusSearch(queries, indices, dists, radius, params);
     }
 
-private:
+protected:
     IndexType* load_saved_index(const Matrix<ElementType>& dataset, const std::string& filename, Distance distance)
     {
         FILE* fin = fopen(filename.c_str(), "rb");
@@ -396,7 +399,7 @@ private:
     	std::swap(index_params_, other.index_params_);
     }
 
-private:
+
     /** Pointer to actual index class */
     IndexType* nnIndex_;
     /** Indices if the index was loaded from a file */
@@ -406,8 +409,63 @@ private:
 };
 
 
+#ifdef FLANN_USE_CUDA
+template<typename Distance>
+class GpuIndex: public Index<Distance>
+{
+public:
+	GpuIndex(const IndexParams& params, Distance distance = Distance())
+		: Index<Distance>(params, distance)
+	{
+		flann_algorithm_t index_type = get_param<flann_algorithm_t>(params, "algorithm");
+		loaded_ = false;
+		assert(index_type == FLANN_INDEX_KDTREE_CUDA);
+
+		Matrix<ElementType> features;
+		if (index_type == FLANN_INDEX_SAVED) {
+			nnIndex_ = load_saved_index(features, get_param<std::string>(params, "filename"), distance);
+			loaded_ = true;
+		}
+		else {
+			flann_algorithm_t index_type = get_param<flann_algorithm_t>(params, "algorithm");
+			nnIndex_ = create_index_by_type<Distance>(index_type, features, params, distance);
+		}
+	}
 
 
+	GpuIndex(const Matrix<ElementType>& features, const IndexParams& params, Distance distance = Distance())
+		: Index<Distance>(features,params,distance)
+	{
+		flann_algorithm_t index_type = get_param<flann_algorithm_t>(params, "algorithm");
+		loaded_ = false;
+		assert(index_type == FLANN_INDEX_KDTREE_CUDA);
+		if (index_type == FLANN_INDEX_SAVED) {
+			nnIndex_ = load_saved_index(features, get_param<std::string>(params, "filename"), distance);
+			loaded_ = true;
+		}
+		else {
+			flann_algorithm_t index_type = get_param<flann_algorithm_t>(params, "algorithm");
+			nnIndex_ = create_index_by_type<Distance>(index_type, features, params, distance);
+		}
+	}
+	int knnSearch(const Matrix<ElementType>& queries,
+		Matrix<int>& indices,
+		Matrix<DistanceType>& dists,
+		size_t knn,
+		const SearchParams& params,
+		cudaStream_t stream = NULL) const
+	{
+		auto gpuIndex = dynamic_cast<KDTreeCuda3dIndex<Distance>*>(nnIndex_);
+		if (gpuIndex)
+		{
+			gpuIndex->knnSearchGpu(queries, indices, dists, knn, params, stream);
+			return knn*queries.rows;
+		}
+		return nnIndex_->knnSearch(queries, indices, dists, knn, params);
+	}
+
+};
+#endif
 
 /**
  * Performs a hierarchical clustering of the points passed as argument and then takes a cut in the
