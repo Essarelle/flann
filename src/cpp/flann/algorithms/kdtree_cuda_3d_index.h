@@ -260,7 +260,7 @@ public:
     }
 
 	virtual int radiusSearchGpu(const Matrix<ElementType>& queries, Matrix<int>& indices, Matrix<DistanceType>& dists,
-				float radius, const SearchParams& params) const;
+				float radius, const SearchParams& params, cudaStream_t stream = NULL) const;
 
 	virtual int radiusSearchGpu(const Matrix<ElementType>& queries, std::vector< std::vector<int> >& indices,
                         std::vector<std::vector<DistanceType> >& dists, float radius, const SearchParams& params) const;

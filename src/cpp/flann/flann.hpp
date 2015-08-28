@@ -418,17 +418,17 @@ public:
 		: Index<Distance>(params, distance)
 	{
 		flann_algorithm_t index_type = get_param<flann_algorithm_t>(params, "algorithm");
-		loaded_ = false;
+		Index<Distance>::loaded_ = false;
 		assert(index_type == FLANN_INDEX_KDTREE_CUDA);
 
 		Matrix<ElementType> features;
 		if (index_type == FLANN_INDEX_SAVED) {
-			nnIndex_ = load_saved_index(features, get_param<std::string>(params, "filename"), distance);
-			loaded_ = true;
+			Index<Distance>::nnIndex_ = load_saved_index(features, get_param<std::string>(params, "filename"), distance);
+			Index<Distance>::loaded_ = true;
 		}
 		else {
 			flann_algorithm_t index_type = get_param<flann_algorithm_t>(params, "algorithm");
-			nnIndex_ = create_index_by_type<Distance>(index_type, features, params, distance);
+			Index<Distance>::nnIndex_ = create_index_by_type<Distance>(index_type, features, params, distance);
 		}
 	}
 
@@ -437,15 +437,15 @@ public:
 		: Index<Distance>(features,params,distance)
 	{
 		flann_algorithm_t index_type = get_param<flann_algorithm_t>(params, "algorithm");
-		loaded_ = false;
+		Index<Distance>::loaded_ = false;
 		assert(index_type == FLANN_INDEX_KDTREE_CUDA);
 		if (index_type == FLANN_INDEX_SAVED) {
-			nnIndex_ = load_saved_index(features, get_param<std::string>(params, "filename"), distance);
-			loaded_ = true;
+			Index<Distance>::nnIndex_ = load_saved_index(features, get_param<std::string>(params, "filename"), distance);
+			Index<Distance>::loaded_ = true;
 		}
 		else {
 			flann_algorithm_t index_type = get_param<flann_algorithm_t>(params, "algorithm");
-			nnIndex_ = create_index_by_type<Distance>(index_type, features, params, distance);
+			Index<Distance>::nnIndex_ = create_index_by_type<Distance>(index_type, features, params, distance);
 		}
 	}
 	int knnSearch(const Matrix<ElementType>& queries,
@@ -455,13 +455,28 @@ public:
 		const SearchParams& params,
 		cudaStream_t stream = NULL) const
 	{
-		auto gpuIndex = dynamic_cast<KDTreeCuda3dIndex<Distance>*>(nnIndex_);
+		KDTreeCuda3dIndex<Distance>* gpuIndex = dynamic_cast<KDTreeCuda3dIndex<Distance>*>(nnIndex_);
 		if (gpuIndex)
 		{
 			gpuIndex->knnSearchGpu(queries, indices, dists, knn, params, stream);
 			return knn*queries.rows;
 		}
 		return nnIndex_->knnSearch(queries, indices, dists, knn, params);
+	}
+	int radiusSearch(const Matrix<ElementType>& queries,
+		Matrix<int>& indices,
+		Matrix<DistanceType>& dists,
+		float radius,
+		const SearchParams& params,
+		cudaStream_t stream = NULL) const
+	{
+		KDTreeCuda3dIndex<Distance>* gpuIndex = dynamic_cast<KDTreeCuda3dIndex<Distance>*>(nnIndex_);
+		if (gpuIndex)
+		{
+			gpuIndex->radiusSearchGpu(queries, indices, dists, radius, params, stream);
+			return queries.rows;
+		}
+		return nnIndex_->radiusSearch(queries, indices, dists, radius, params);
 	}
 
 };
