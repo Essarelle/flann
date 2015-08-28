@@ -455,13 +455,13 @@ public:
 		const SearchParams& params,
 		cudaStream_t stream = NULL) const
 	{
-		KDTreeCuda3dIndex<Distance>* gpuIndex = dynamic_cast<KDTreeCuda3dIndex<Distance>*>(nnIndex_);
+		KDTreeCuda3dIndex<Distance>* gpuIndex = dynamic_cast<KDTreeCuda3dIndex<Distance>*>(Index<Distance>::nnIndex_);
 		if (gpuIndex)
 		{
 			gpuIndex->knnSearchGpu(queries, indices, dists, knn, params, stream);
 			return knn*queries.rows;
 		}
-		return nnIndex_->knnSearch(queries, indices, dists, knn, params);
+		return Index<Distance>::nnIndex_->knnSearch(queries, indices, dists, knn, params);
 	}
 	int radiusSearch(const Matrix<ElementType>& queries,
 		Matrix<int>& indices,
@@ -470,13 +470,13 @@ public:
 		const SearchParams& params,
 		cudaStream_t stream = NULL) const
 	{
-		KDTreeCuda3dIndex<Distance>* gpuIndex = dynamic_cast<KDTreeCuda3dIndex<Distance>*>(nnIndex_);
+		KDTreeCuda3dIndex<Distance>* gpuIndex = dynamic_cast<KDTreeCuda3dIndex<Distance>*>(Index<Distance>::nnIndex_);
 		if (gpuIndex)
 		{
 			gpuIndex->radiusSearchGpu(queries, indices, dists, radius, params, stream);
 			return queries.rows;
 		}
-		return nnIndex_->radiusSearch(queries, indices, dists, radius, params);
+		return Index<Distance>::nnIndex_->radiusSearch(queries, indices, dists, radius, params);
 	}
 
 };
