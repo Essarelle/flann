@@ -398,6 +398,151 @@ std::ostream& operator <<(std::ostream& stream, const cuda::kd_tree_builder_deta
     stream<<"(split l/r: "<< s.left <<" "<< s.right<< "  split:"<<s.split_dim<<" "<<s.split_val<<")";
     return stream;
 }
+
+struct step_functor : public thrust::unary_function<int, int>
+{
+	int columns;
+	int step;
+	step_functor(int columns_, int step_) : columns(columns_), step(step_)  {   };
+	__host__ __device__
+		int operator()(int x) const
+	{
+		int row = x / columns;
+		int idx = (row * step) + x % columns;
+		return idx;
+	}
+};
+
+
+template<typename T>
+thrust::permutation_iterator<thrust::device_ptr<T>, thrust::transform_iterator<step_functor, thrust::counting_iterator<int>>>  GpuMatBeginItr(flann::Matrix<T>& mat, int col = 0)
+{
+	return thrust::make_permutation_iterator(thrust::device_pointer_cast(mat.ptr(0)),
+		thrust::make_transform_iterator(thrust::make_counting_iterator(0),
+		step_functor(mat.cols, mat.stride / sizeof(T))));
+}
+
+template<typename T>
+thrust::permutation_iterator<thrust::device_ptr<T>, thrust::transform_iterator<step_functor, thrust::counting_iterator<int>>>  GpuMatEndItr(flann::Matrix<T>& mat, int col = 0)
+{
+	return thrust::make_permutation_iterator(thrust::device_pointer_cast(mat.ptr(0) + col),
+		thrust::make_transform_iterator(thrust::make_counting_iterator(mat.rows),
+		step_functor(mat.cols, mat.stride / sizeof(T))));
+}
+
+
+
+// this version is used for dynamically determined multi dimensional datasets
+class CudaKdTreeBuilder2
+{
+	CudaKdTreeBuilder2(flann::Matrix<float> points, int max_leaf_size)
+	{
+		points_ = points;
+		int prealloc = points.rows / max_leaf_size_ * 16;
+		allocation_info_.resize(3);
+		allocation_info_[NodeCount] = 1;
+		allocation_info_[NodesAllocated] = prealloc;
+		allocation_info_[OutOfSpace] = 0;
+
+		child1_ = new thrust::device_vector<int>(prealloc, -1);
+		parent_ = new thrust::device_vector<int>(prealloc, -1);
+
+		cuda::kd_tree_builder_detail::SplitInfo s;
+		s.left = 0;
+		s.right = 0;
+		splits_ = new thrust::device_vector<cuda::kd_tree_builder_detail::SplitInfo>(prealloc, s);
+		s.right = points.rows;
+		(*splits_)[0] = s;
+
+		d_aabb_min_ = new thrust::device_vector<float>(prealloc*points.cols);
+		d_aabb_max_ = new thrust::device_vector<float>(prealloc*points.cols);
+		aabb_min_ = flann::Matrix<float>(thrust::raw_pointer_cast(d_aabb_min_->data()), prealloc, points.cols);
+		aabb_max_ = flann::Matrix<float>(thrust::raw_pointer_cast(d_aabb_max_->data()), prealloc, points.cols);
+
+		d_index_ = new thrust::device_vector<int>(points_.rows*points_.cols);
+		index_ = flann::Matrix<int>(thrust::raw_pointer_cast(d_index_->data()), points_.rows, points_.cols);
+
+		d_owners_ = new thrust::device_vector<int>(points_.rows*points_.cols, 0);
+		owners_ = flann::Matrix<int>(thrust::raw_pointer_cast(d_owners_->data()), points_.rows, points_.cols);
+		
+		d_leftright_ = new thrust::device_vector<int>(points_.rows * points_.cols, 0);
+		leftright_ = flann::Matrix<int>(thrust::raw_pointer_cast(d_leftright_->data()), points_.rows, points_.cols);
+		
+		//d_sorted_points_ = new thrust::device_vector<float>(points_.rows * points_.cols);
+		//d_sorted_points_ = new thrust::device_vector<float>(thrust::device_pointer_cast(points.ptr()), thrust::device_pointer_cast(points.ptr() + points.cols * points.rows));
+		//sorted_points_ = flann::Matrix<float>(thrust::raw_pointer_cast(d_sorted_points_->data()), points_.rows, points_.cols);
+
+		delete_node_info_ = false;
+	}
+
+	void buildTree()
+	{
+		// Create GPU index arrays
+		thrust::counting_iterator<int> it(0);
+		thrust::copy(it, it + points_.rows, GpuMatBeginItr(index_));
+		for (int i = 1; i < points_.cols; ++i)
+		{
+			thrust::copy(GpuMatBeginItr(index_), GpuMatEndItr(index_), GpuMatBeginItr(index_, i));
+		}
+		thrust::device_vector<float> tempv(points_.rows);
+		for (int i = 0; i < points_.cols; ++i)
+		{
+			thrust::copy(GpuMatBeginItr(points_, i), GpuMatEndItr(points_, i), tempv.begin());
+			thrust::sort_by_key(tempv.begin(), tempv.end(), GpuMatBeginItr(index_,i));
+		}
+
+	}
+	template<class Distance>
+	friend class KDTreeCuda3dIndex;
+protected:
+	flann::Matrix<float> points_;
+	// tree data, those are stored per-node
+
+	//! left child of each node. (right child==left child + 1, due to the alloc mechanism)
+	//! child1_[node]==-1 if node is a leaf node
+	thrust::device_vector<int>* child1_;
+	//! parent node of each node
+	thrust::device_vector<int>* parent_;
+	//! split info (dim/value or left/right pointers)
+	thrust::device_vector<cuda::kd_tree_builder_detail::SplitInfo>* splits_;
+	//! min aabb value of each node
+	thrust::device_vector<float>* d_aabb_min_;
+	flann::Matrix<float> aabb_min_;
+	//! max aabb value of each node
+	thrust::device_vector<float>* d_aabb_max_;
+	flann::Matrix<float> aabb_max_;
+
+	enum AllocationInfo
+	{
+		NodeCount = 0,
+		NodesAllocated = 1,
+		OutOfSpace = 2
+	};
+	thrust::device_vector<char> allocation_info_;
+
+	int max_leaf_size_;
+
+	// coordinate values of the points
+	//thrust::device_vector<float>* points_x_, *points_y_, *points_z_;
+	//thrust::device_vector<float>* d_sorted_points_;
+	//flann::Matrix<float> sorted_points_;
+	// indices
+	//thrust::device_vector<int>* index_x_, *index_y_, *index_z_;
+	thrust::device_vector<int>* d_index_;
+	flann::Matrix<int> index_;
+	// owner node
+	//thrust::device_vector<int>* owners_x_, *owners_y_, *owners_z_;
+	thrust::device_vector<int>* d_owners_;
+	flann::Matrix<int> owners_;
+	// contains info about whether a point was partitioned to the left or right child after a split
+	//thrust::device_vector<int>* leftright_x_, *leftright_y_, *leftright_z_;
+	thrust::device_vector<int>* d_leftright_;
+	flann::Matrix<int> leftright_;
+	thrust::device_vector<int>* tmp_index_, *tmp_owners_, *tmp_misc_;
+	bool delete_node_info_;
+
+};
+
 class CudaKdTreeBuilder
 {
 public:
