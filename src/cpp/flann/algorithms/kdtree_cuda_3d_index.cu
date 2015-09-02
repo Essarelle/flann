@@ -44,6 +44,7 @@
 #include <thrust/scan.h>
 #include <thrust/count.h>
 #include <flann/algorithms/kdtree_cuda_builder.h>
+#include <flann/algorithms/DynKdtree_cuda_builder.h>
 #include <vector_types.h>
 namespace flann
 {
