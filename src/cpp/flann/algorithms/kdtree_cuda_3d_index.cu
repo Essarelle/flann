@@ -35,6 +35,7 @@
 #include <thrust/copy.h>
 #include <thrust/device_vector.h>
 #include <thrust/system/cuda/execution_policy.h>
+//#include <thrust/execution_policy.h>
 #include <vector_types.h>
 #include <flann/util/cutil_math.h>
 #include <thrust/host_vector.h>
@@ -303,7 +304,7 @@ void KDTreeCuda3dIndex<Distance>::knnSearchGpu(const Matrix<ElementType>& querie
 
     if( !matrices_on_gpu ) {
         thrust::device_vector<float> queriesDev(istride* queries.rows,0);
-        thrust::copy(thrust::cuda::par.on(stream), queries.ptr(), queries.ptr()+istride*queries.rows, queriesDev.begin() );
+        thrust::copy(thrust::system::cuda::par.on(stream), queries.ptr(), queries.ptr()+istride*queries.rows, queriesDev.begin() );
         thrust::device_vector<float> distsDev(queries.rows* ostride);
         thrust::device_vector<int> indicesDev(queries.rows* ostride);
 
@@ -364,9 +365,9 @@ void KDTreeCuda3dIndex<Distance>::knnSearchGpu(const Matrix<ElementType>& querie
                                                                                       );
             }
         }
-		thrust::copy(thrust::cuda::par.on(stream), distsDev.begin(), distsDev.end(), dists.ptr());
-		thrust::transform(thrust::cuda::par.on(stream), indicesDev.begin(), indicesDev.end(), indicesDev.begin(), map_indices(thrust::raw_pointer_cast(&((*gpu_helper_->gpu_vind_))[0])));
-		thrust::copy(thrust::cuda::par.on(stream), indicesDev.begin(), indicesDev.end(), indices.ptr());
+		thrust::copy(thrust::system::cuda::par.on(stream), distsDev.begin(), distsDev.end(), dists.ptr());
+		thrust::transform(thrust::system::cuda::par.on(stream), indicesDev.begin(), indicesDev.end(), indicesDev.begin(), map_indices(thrust::raw_pointer_cast(&((*gpu_helper_->gpu_vind_))[0])));
+		thrust::copy(thrust::system::cuda::par.on(stream), indicesDev.begin(), indicesDev.end(), indices.ptr());
     }
     else {
         thrust::device_ptr<float> qd = thrust::device_pointer_cast(queries.ptr());
@@ -430,7 +431,7 @@ void KDTreeCuda3dIndex<Distance>::knnSearchGpu(const Matrix<ElementType>& querie
                                                                                       );
             }
         }
-		thrust::transform(thrust::cuda::par.on(stream), id, id + knn*queries.rows, id, map_indices(thrust::raw_pointer_cast(&((*gpu_helper_->gpu_vind_))[0])));
+		thrust::transform(thrust::system::cuda::par.on(stream), id, id + knn*queries.rows, id, map_indices(thrust::raw_pointer_cast(&((*gpu_helper_->gpu_vind_))[0])));
     }
 	if (stream == NULL)
 		cudaDeviceSynchronize();
@@ -594,7 +595,7 @@ int KDTreeCuda3dIndex< Distance >::radiusSearchGpu(const Matrix<ElementType>& qu
 
     if( !matrices_on_gpu ) {
         thrust::device_vector<float> queriesDev(istride* queries.rows,0);
-        thrust::copy(thrust::cuda::par.on(stream), queries.ptr(), queries.ptr()+istride*queries.rows, queriesDev.begin() );
+        thrust::copy(thrust::system::cuda::par.on(stream), queries.ptr(), queries.ptr()+istride*queries.rows, queriesDev.begin() );
         typename GpuDistance<Distance>::type distance;
         int threadsPerBlock = 128;
         int blocksPerGrid=(queries.rows+threadsPerBlock-1)/threadsPerBlock;
@@ -614,7 +615,8 @@ int KDTreeCuda3dIndex< Distance >::radiusSearchGpu(const Matrix<ElementType>& qu
                                                                                   queries.rows, flann::cuda::CountingRadiusResultSet<float>(radius,-1),
                                                                                   distance
                                                                                   );
-			thrust::copy(thrust::cuda::par.on(stream), indicesDev.begin(), indicesDev.end(), indices.ptr());
+			
+			thrust::copy(thrust::system::cuda::par.on(stream), indicesDev.begin(), indicesDev.end(), indices.ptr());
 			if (stream == NULL)
 			{
 				cudaDeviceSynchronize();
@@ -659,10 +661,10 @@ int KDTreeCuda3dIndex< Distance >::radiusSearchGpu(const Matrix<ElementType>& qu
                                                                                   thrust::raw_pointer_cast(&distsDev[0]),
                                                                                   queries.rows, flann::cuda::KnnRadiusResultSet<float, false>(max_neighbors,sorted,epsError, radius), distance);
         }
-
-        thrust::copy(thrust::cuda::par.on(stream), distsDev.begin(), distsDev.end(), dists.ptr() );
-		thrust::transform(thrust::cuda::par.on(stream), indicesDev.begin(), indicesDev.end(), indicesDev.begin(), map_indices(thrust::raw_pointer_cast(&((*gpu_helper_->gpu_vind_))[0])));
-		thrust::copy(thrust::cuda::par.on(stream), indicesDev.begin(), indicesDev.end(), indices.ptr());
+		
+        thrust::copy(thrust::system::cuda::par.on(stream), distsDev.begin(), distsDev.end(), dists.ptr() );
+		thrust::transform(thrust::system::cuda::par.on(stream), indicesDev.begin(), indicesDev.end(), indicesDev.begin(), map_indices(thrust::raw_pointer_cast(&((*gpu_helper_->gpu_vind_))[0])));
+		thrust::copy(thrust::system::cuda::par.on(stream), indicesDev.begin(), indicesDev.end(), indices.ptr());
 		if (stream == NULL)
 		{
 			cudaDeviceSynchronize();
@@ -699,7 +701,7 @@ int KDTreeCuda3dIndex< Distance >::radiusSearchGpu(const Matrix<ElementType>& qu
                                                                                   queries.rows, flann::cuda::CountingRadiusResultSet<float>(radius,-1),
                                                                                   distance
                                                                                   );
-			thrust::copy(thrust::cuda::par.on(stream), indicesDev.begin(), indicesDev.end(), indices.ptr());
+			thrust::copy(thrust::system::cuda::par.on(stream), indicesDev.begin(), indicesDev.end(), indices.ptr());
 			if (stream == NULL)
 			{
 				cudaDeviceSynchronize();
@@ -737,7 +739,7 @@ int KDTreeCuda3dIndex< Distance >::radiusSearchGpu(const Matrix<ElementType>& qu
                                                                                   queries.rows, flann::cuda::KnnRadiusResultSet<float, false>(max_neighbors,sorted,epsError, radius), distance);
         }
 
-        thrust::transform(thrust::cuda::par.on(stream), id, id+max_neighbors*queries.rows, id, map_indices(thrust::raw_pointer_cast( &((*gpu_helper_->gpu_vind_))[0]) ));
+        thrust::transform(thrust::system::cuda::par.on(stream), id, id+max_neighbors*queries.rows, id, map_indices(thrust::raw_pointer_cast( &((*gpu_helper_->gpu_vind_))[0]) ));
 		if (stream == NULL)
 		{
 			cudaDeviceSynchronize();

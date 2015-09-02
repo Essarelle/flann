@@ -42,61 +42,158 @@
 
 namespace flann
 {
-//      template< typename T >
-//      void print_vector(  const thrust::device_vector<T>& v )
-//      {
-//              for( int i=0; i< v.size(); i++ )
-//              {
-//                      std::cout<<v[i]<<std::endl;
-//              }
-//      }
-//
-//      template< typename T1, typename T2 >
-//      void print_vector(  const thrust::device_vector<T1>& v1, const thrust::device_vector<T2>& v2 )
-//      {
-//              for( int i=0; i< v1.size(); i++ )
-//              {
-//                      std::cout<<i<<": "<<v1[i]<<" "<<v2[i]<<std::endl;
-//              }
-//      }
-//
-//      template< typename T1, typename T2, typename T3 >
-//      void print_vector(  const thrust::device_vector<T1>& v1, const thrust::device_vector<T2>& v2, const thrust::device_vector<T3>& v3 )
-//      {
-//              for( int i=0; i< v1.size(); i++ )
-//              {
-//                      std::cout<<i<<": "<<v1[i]<<" "<<v2[i]<<" "<<v3[i]<<std::endl;
-//              }
-//      }
-//
-//      template< typename T >
-//      void print_vector_by_index(  const thrust::device_vector<T>& v,const thrust::device_vector<int>& ind )
-//      {
-//              for( int i=0; i< v.size(); i++ )
-//              {
-//                      std::cout<<v[ind[i]]<<std::endl;
-//              }
-//      }
-
-//      std::ostream& operator <<(std::ostream& stream, const cuda::kd_tree_builder_detail::SplitInfo& s) {
-//      stream<<"(split l/r: "<< s.left <<" "<< s.right<< "  split:"<<s.split_dim<<" "<<s.split_val<<")";
-//      return stream;
-// }
-//
-//
-// std::ostream& operator <<(std::ostream& stream, const cuda::kd_tree_builder_detail::NodeInfo& s) {
-//      stream<<"(node: "<<s.child1()<<" "<<s.parent()<<" "<<s.child2()<<")";
-//      return stream;
-// }
-//
-// std::ostream& operator <<(std::ostream& stream, const float4& s) {
-//      stream<<"("<<s.x<<","<<s.y<<","<<s.z<<","<<s.w<<")";
-//      return stream;
-// }
 namespace cuda
 {
+
+	struct step_functor : public thrust::unary_function<int, int>
+	{
+		int columns;
+		int step;
+		step_functor(int columns_, int step_) : columns(columns_), step(step_)  {   };
+		__host__ __device__
+			int operator()(int x) const
+		{
+			int row = x / columns;
+			int idx = (row * step) + x % columns;
+			return idx;
+		}
+	};
+
+	struct Range
+	{
+		Range(int start_, int end_ = -1) : start(start_), end(end_){}
+		int start;
+		int end;
+		__device__ __host__ int span()
+		{
+			return end - start;
+		}
+	};
+	// TODO
+	// Ideally we would have an object that can be initialized with some information about the matrix, the object then can be combined with an iterator to
+	// Such that when the iterator is dereferenced it presents an object to SplitNodes2::operator() that can be used to access all row elements 
+	template<typename T>struct Row
+	{
+		thrust::device_ptr<T> ptr;
+		size_t step; // Step is in elements, not bytes
+	};
+	
+	
+	template<typename T>
+	struct DeviceMatrix : public ::flann::Matrix<T>
+	{
+		typedef thrust::permutation_iterator<thrust::device_ptr<T>, thrust::transform_iterator<step_functor, thrust::counting_iterator<int>>> iterator;
+		typedef thrust::permutation_iterator<thrust::device_ptr<T>, thrust::transform_iterator<step_functor, thrust::counting_iterator<int>>> row_iterator;
+
+		__device__ __host__ DeviceMatrix(T* data_, size_t rows_, size_t cols_, size_t stride_ = 0) :
+			::flann::Matrix<T>(data_, rows_, cols_, flann_datatype_value<T>::value, stride_)
+		{
+			if (stride == 0) 
+				stride = sizeof(T)*cols;
+		}
+		__device__ __host__ DeviceMatrix() : ::flann::Matrix<T>(){}
+
+		__host__ DeviceMatrix(flann::Matrix<T>& other) : ::flann::Matrix<T>(other){}
+
+
+		__host__ operator=(flann::Matrix<T>& other)
+		{
+			flann::Matrix<T>::operator=(other);
+		}
+		__forceinline__ __device__ __host__  thrust::device_ptr<T> operator[](size_t index) const
+		{
+			return thrust::device_pointer_cast(reinterpret_cast<T*>(data + index*stride));
+		}
+
+		__forceinline__ __device__ __host__ thrust::device_ptr<T> ptr() const
+		{
+			return thrust::device_pointer_cast(reinterpret_cast<T*>(data));
+		}
+		__device__ __host__ iterator begin(int col = -1)
+		{
+			if (col == -1)
+			{
+				return thrust::make_permutation_iterator(
+					ptr(),
+					thrust::make_transform_iterator(
+					thrust::make_counting_iterator(0),
+					step_functor(cols, stride / sizeof(T))));
+			}
+			else
+			{
+				return thrust::make_permutation_iterator(
+							ptr() + col,
+							thrust::make_transform_iterator(
+								thrust::make_counting_iterator(0),
+								step_functor(1, stride / sizeof(T))));
+			}
+		}
+		__device__ __host__ iterator end(int col = -1)
+		{
+			if (col == -1)
+			{
+				size_t size = rows*cols;
+				return thrust::make_permutation_iterator(
+							ptr(),
+							thrust::make_transform_iterator(
+							thrust::make_counting_iterator(size),
+							step_functor(cols, stride / sizeof(T))));
+			}
+			else
+			{
+				
+				return thrust::make_permutation_iterator(
+						ptr() + col,
+						thrust::make_transform_iterator(
+							thrust::make_counting_iterator(rows),
+							step_functor(1, stride / sizeof(T))));
+			}
+		}
+
+		iterator begin(Range rowRange, Range colRange = Range(-1, -1))
+		{
+			if (rowRange.start == -1)
+				rowRange.start = 0;
+			if (rowRange.end == -1)
+				rowRange.end = rows;
+			if (colRange.start == -1)
+				colRange.start = 0;
+			if (colRange.end == -1)
+				colRange.end = cols;
+			return thrust::make_permutation_iterator(
+					operator[](rowRange.start) + colRange.start,
+					thrust::make_transform_iterator(
+						thrust::make_counting_iterator(0),
+						step_functor(colRange.span(), stride / sizeof(T))));
+		}
+
+		iterator end(Range rowRange, Range colRange = Range(-1, -1))
+		{
+			if (rowRange.start == -1)
+				rowRange.start = 0;
+			if (rowRange.end == -1)
+				rowRange.end = rows;
+			if (colRange.start == -1)
+				colRange.start = 0;
+			if (colRange.end == -1)
+				colRange.end = cols;
+			return thrust::make_permutation_iterator(
+				operator[](rowRange.start) + colRange.start,
+				thrust::make_transform_iterator(
+					thrust::make_counting_iterator(colRange.span()*rowRange.span()),
+					step_functor(colRange.span(), stride / sizeof(T))));
+		}
+	};
+	
+
+
 namespace kd_tree_builder_detail
 {
+
+
+
+
+
 //! normal node: contains the split dimension and value
 //! leaf node: left == index of first points, right==index of last point +1
 struct SplitInfo
@@ -152,6 +249,77 @@ float get_value_by_index( const float4& f, int i )
     }
 
 }
+
+struct MovePointsToChildNodes2
+{
+	MovePointsToChildNodes2(int* child1, SplitInfo* splits, DeviceMatrix<float> points, DeviceMatrix<int> ownership, DeviceMatrix<int> leftright_)
+		: child1_(child1), splits_(splits), x_(x), y_(y), z_(z), ox_(ox), oy_(oy), oz_(oz), lrx_(lrx), lry_(lry), lrz_(lrz){}
+	//  int dim;
+	//  float threshold;
+	int* child1_;
+	SplitInfo* splits_;
+
+	// coordinate values
+	float* x_, *y_, *z_;
+	// owner indices -> which node does the point belong to?
+	int* ox_, *oy_, *oz_;
+	// temp info: will be set to 1 of a point is moved to the right child node, 0 otherwise
+	// (used later in the scan op to separate the points of the children into continuous ranges)
+	int* lrx_, *lry_, *lrz_;
+	__device__
+		void operator()(const thrust::tuple<int, int, int, int>& data)
+	{
+		int index = thrust::get<0>(data);
+		int owner = ox_[index]; // before a split, all points at the same position in the index array have the same owner
+		int point_ind1 = thrust::get<1>(data);
+		int point_ind2 = thrust::get<2>(data);
+		int point_ind3 = thrust::get<3>(data);
+		int leftChild = child1_[owner];
+		int split_dim;
+		float dim_val1, dim_val2, dim_val3;
+		SplitInfo split;
+		lrx_[index] = 0;
+		lry_[index] = 0;
+		lrz_[index] = 0;
+		// this element already belongs to a leaf node -> everything alright, no need to change anything
+		if (leftChild == -1) {
+			return;
+		}
+		// otherwise: load split data, and assign this index to the new owner
+		split = splits_[owner];
+		split_dim = split.split_dim;
+		switch (split_dim) {
+		case 0:
+			dim_val1 = x_[point_ind1];
+			dim_val2 = x_[point_ind2];
+			dim_val3 = x_[point_ind3];
+			break;
+		case 1:
+			dim_val1 = y_[point_ind1];
+			dim_val2 = y_[point_ind2];
+			dim_val3 = y_[point_ind3];
+			break;
+		default:
+			dim_val1 = z_[point_ind1];
+			dim_val2 = z_[point_ind2];
+			dim_val3 = z_[point_ind3];
+			break;
+
+		}
+
+
+		int r1 = leftChild + (dim_val1 > split.split_val);
+		ox_[index] = r1;
+		int r2 = leftChild + (dim_val2 > split.split_val);
+		oy_[index] = r2;
+		oz_[index] = leftChild + (dim_val3 > split.split_val);
+
+		lrx_[index] = (dim_val1 > split.split_val);
+		lry_[index] = (dim_val2 > split.split_val);
+		lrz_[index] = (dim_val3 > split.split_val);
+		//                      return thrust::make_tuple( r1, r2, leftChild+(dim_val > split.split_val) );
+	}
+};
 
 //! mark a point as belonging to the left or right child of its current parent
 //! called after parents are split
@@ -268,7 +436,8 @@ struct SetLeftAndRightAndAABB
 //! if yes:
 //! - allocate child nodes
 //! - set split axis as axis of maximum aabb length
-struct SplitNodes
+template<typename T>
+struct SplitNodes2
 {
     int maxPointsPerNode;
     int* node_count;
@@ -277,30 +446,38 @@ struct SplitNodes
     int* child1_;
     int* parent_;
     SplitInfo* splits;
+	int D;
 
     __device__
-    void operator()( thrust::tuple<int&, int&,SplitInfo&,float4&,float4&, int> node ) // float4: aabbMin, aabbMax
+    void operator()( thrust::tuple<int&, int&,SplitInfo&,T&,T&, int> node ) // float4: aabbMin, aabbMax
     {
         int& parent=thrust::get<0>(node);
         int& child1=thrust::get<1>(node);
         SplitInfo& s=thrust::get<2>(node);
-        const float4& aabbMin=thrust::get<3>(node);
-        const float4& aabbMax=thrust::get<4>(node);
+        const float* aabbMin = &thrust::get<3>(node);
+        const float* aabbMax = &thrust::get<4>(node);
         int my_index = thrust::get<5>(node);
         bool split_node=false;
         // first, each thread block counts the number of nodes that it needs to allocate...
         __shared__ int block_nodes_to_allocate;
-        if( threadIdx.x== 0 ) block_nodes_to_allocate=0;
+        if( threadIdx.x== 0 ) 
+			block_nodes_to_allocate=0;
         __syncthreads();
 
         // don't split if all points are equal
         // (could lead to an infinite loop, and doesn't make any sense anyway)
-        bool all_points_in_node_are_equal=aabbMin.x == aabbMax.x && aabbMin.y==aabbMax.y && aabbMin.z==aabbMax.z;
-
+        //bool all_points_in_node_are_equal=aabbMin.x == aabbMax.x && aabbMin.y==aabbMax.y && aabbMin.z==aabbMax.z;
+		bool all_points_in_node_are_equal = true;
+		for (int i = 0; i < D; ++i)
+		{
+			if (aabbMin[i] != aabbMax[i])
+				all_points_in_node_are_equal = false;
+		}
         int offset_to_global=0;
 
         // maybe this could be replaced with a reduction...
-        if(( child1==-1) &&( s.right-s.left > maxPointsPerNode) && !all_points_in_node_are_equal ) { // leaf node
+        if(( child1==-1) &&( s.right-s.left > maxPointsPerNode) && !all_points_in_node_are_equal )  // leaf node
+		{
             split_node=true;
             offset_to_global = atomicAdd( &block_nodes_to_allocate,2 );
         }
@@ -309,11 +486,13 @@ struct SplitNodes
         __shared__ int block_left;
         __shared__ bool enough_space;
         // ... then the first thread tries to allocate this many nodes...
-        if( threadIdx.x==0) {
+        if( threadIdx.x==0) 
+		{
             block_left = atomicAdd( node_count, block_nodes_to_allocate );
             enough_space = block_left+block_nodes_to_allocate < *nodes_allocated;
             // if it doesn't succeed, no nodes will be created by this block
-            if( !enough_space ) {
+            if( !enough_space ) 
+			{
                 atomicAdd( node_count, -block_nodes_to_allocate );
                 *out_of_space=1;
             }
@@ -334,14 +513,29 @@ struct SplitNodes
             splits[left+1].right=0;
 
             // split axis/position: middle of longest aabb extent
-            float4 aabbDim=aabbMax-aabbMin;
+            //float4 aabbDim=aabbMax-aabbMin;
+			float* aabbDim = malloc(D*sizeof(float));
+			for (int i = 0; i < D; ++i)
+			{
+				aabDim[i] = aabbMax[i] - aabbMin[i];
+			}
+			
             int maxDim=0;
-            float maxDimLength=aabbDim.x;
-            float4 splitVal=(aabbMax+aabbMin);
-            splitVal*=0.5f;
-            for( int i=1; i<=2; i++ ) {
-                float val = get_value_by_index(aabbDim,i);
-                if( val > maxDimLength ) {
+            float maxDimLength=aabbDim[0];
+
+			float* splitVal = malloc(D*sizeof(float));
+            //float4 splitVal=(aabbMax+aabbMin);
+			for (int i = 0; i < D; ++i)
+			{
+				splitVal[i] = (aabbMax[i] + aabbMin[i])*0.5f;
+			}
+            //splitVal*=0.5f;
+            for( int i=1; i < D; i++ ) 
+			{
+                //float val = get_value_by_index(aabbDim,i);
+				float val = aabbDim[i];
+                if( val > maxDimLength ) 
+				{
                     maxDim=i;
                     maxDimLength=val;
                 }
@@ -356,10 +550,107 @@ struct SplitNodes
             parent_[left+1]=my_index;
             child1_[left]=-1;
             child1_[left+1]=-1;
+			free(aabbDim);
+			free(splitVal);
         }
     }
 };
 
+//! - decide whether a node has to be split
+//! if yes:
+//! - allocate child nodes
+//! - set split axis as axis of maximum aabb length
+struct SplitNodes
+{
+	int maxPointsPerNode;
+	int* node_count;
+	int* nodes_allocated;
+	int* out_of_space;
+	int* child1_;
+	int* parent_;
+	SplitInfo* splits;
+
+	__device__
+		void operator()(thrust::tuple<int&, int&, SplitInfo&, float4&, float4&, int> node) // float4: aabbMin, aabbMax
+	{
+		int& parent = thrust::get<0>(node);
+		int& child1 = thrust::get<1>(node);
+		SplitInfo& s = thrust::get<2>(node);
+		const float4& aabbMin = thrust::get<3>(node);
+		const float4& aabbMax = thrust::get<4>(node);
+		int my_index = thrust::get<5>(node);
+		bool split_node = false;
+		// first, each thread block counts the number of nodes that it needs to allocate...
+		__shared__ int block_nodes_to_allocate;
+		if (threadIdx.x == 0) block_nodes_to_allocate = 0;
+		__syncthreads();
+
+		// don't split if all points are equal
+		// (could lead to an infinite loop, and doesn't make any sense anyway)
+		bool all_points_in_node_are_equal = aabbMin.x == aabbMax.x && aabbMin.y == aabbMax.y && aabbMin.z == aabbMax.z;
+
+		int offset_to_global = 0;
+
+		// maybe this could be replaced with a reduction...
+		if ((child1 == -1) && (s.right - s.left > maxPointsPerNode) && !all_points_in_node_are_equal) { // leaf node
+			split_node = true;
+			offset_to_global = atomicAdd(&block_nodes_to_allocate, 2);
+		}
+
+		__syncthreads();
+		__shared__ int block_left;
+		__shared__ bool enough_space;
+		// ... then the first thread tries to allocate this many nodes...
+		if (threadIdx.x == 0) {
+			block_left = atomicAdd(node_count, block_nodes_to_allocate);
+			enough_space = block_left + block_nodes_to_allocate < *nodes_allocated;
+			// if it doesn't succeed, no nodes will be created by this block
+			if (!enough_space) {
+				atomicAdd(node_count, -block_nodes_to_allocate);
+				*out_of_space = 1;
+			}
+		}
+
+		__syncthreads();
+		// this thread needs to split it's node && there was enough space for all the nodes
+		// in this block.
+		//(The whole "allocate-per-block-thing" is much faster than letting each element allocate
+		// its space on its own, because shared memory atomics are A LOT faster than
+		// global mem atomics!)
+		if (split_node && enough_space) {
+			int left = block_left + offset_to_global;
+
+			splits[left].left = s.left;
+			splits[left].right = s.right;
+			splits[left + 1].left = 0;
+			splits[left + 1].right = 0;
+
+			// split axis/position: middle of longest aabb extent
+			float4 aabbDim = aabbMax - aabbMin;
+			int maxDim = 0;
+			float maxDimLength = aabbDim.x;
+			float4 splitVal = (aabbMax + aabbMin);
+			splitVal *= 0.5f;
+			for (int i = 1; i <= 2; i++) {
+				float val = get_value_by_index(aabbDim, i);
+				if (val > maxDimLength) {
+					maxDim = i;
+					maxDimLength = val;
+				}
+			}
+			s.split_dim = maxDim;
+			s.split_val = get_value_by_index(splitVal, maxDim);
+
+			child1_[my_index] = left;
+			splits[my_index] = s;
+
+			parent_[left] = my_index;
+			parent_[left + 1] = my_index;
+			child1_[left] = -1;
+			child1_[left + 1] = -1;
+		}
+	}
+};
 
 //! computes the scatter target address for the split operation, see Sengupta,Harris,Zhang,Owen: Scan Primitives for GPU Computing
 //! in my use case, this is about 2x as fast as thrust::partition
@@ -399,43 +690,14 @@ std::ostream& operator <<(std::ostream& stream, const cuda::kd_tree_builder_deta
     return stream;
 }
 
-struct step_functor : public thrust::unary_function<int, int>
-{
-	int columns;
-	int step;
-	step_functor(int columns_, int step_) : columns(columns_), step(step_)  {   };
-	__host__ __device__
-		int operator()(int x) const
-	{
-		int row = x / columns;
-		int idx = (row * step) + x % columns;
-		return idx;
-	}
-};
-
-
-template<typename T>
-thrust::permutation_iterator<thrust::device_ptr<T>, thrust::transform_iterator<step_functor, thrust::counting_iterator<int>>>  GpuMatBeginItr(flann::Matrix<T>& mat, int col = 0)
-{
-	return thrust::make_permutation_iterator(thrust::device_pointer_cast(mat.ptr(0)),
-		thrust::make_transform_iterator(thrust::make_counting_iterator(0),
-		step_functor(mat.cols, mat.stride / sizeof(T))));
-}
-
-template<typename T>
-thrust::permutation_iterator<thrust::device_ptr<T>, thrust::transform_iterator<step_functor, thrust::counting_iterator<int>>>  GpuMatEndItr(flann::Matrix<T>& mat, int col = 0)
-{
-	return thrust::make_permutation_iterator(thrust::device_pointer_cast(mat.ptr(0) + col),
-		thrust::make_transform_iterator(thrust::make_counting_iterator(mat.rows),
-		step_functor(mat.cols, mat.stride / sizeof(T))));
-}
 
 
 
 // this version is used for dynamically determined multi dimensional datasets
 class CudaKdTreeBuilder2
 {
-	CudaKdTreeBuilder2(flann::Matrix<float> points, int max_leaf_size)
+	CudaKdTreeBuilder2(flann::Matrix<float> points, int max_leaf_size):
+		max_leaf_size_(max_leaf_size_)
 	{
 		points_ = points;
 		int prealloc = points.rows / max_leaf_size_ * 16;
@@ -456,17 +718,17 @@ class CudaKdTreeBuilder2
 
 		d_aabb_min_ = new thrust::device_vector<float>(prealloc*points.cols);
 		d_aabb_max_ = new thrust::device_vector<float>(prealloc*points.cols);
-		aabb_min_ = flann::Matrix<float>(thrust::raw_pointer_cast(d_aabb_min_->data()), prealloc, points.cols);
-		aabb_max_ = flann::Matrix<float>(thrust::raw_pointer_cast(d_aabb_max_->data()), prealloc, points.cols);
+		aabb_min_ = flann::cuda::DeviceMatrix<float>(thrust::raw_pointer_cast(d_aabb_min_->data()), prealloc, points.cols);
+		aabb_max_ = flann::cuda::DeviceMatrix<float>(thrust::raw_pointer_cast(d_aabb_max_->data()), prealloc, points.cols);
 
 		d_index_ = new thrust::device_vector<int>(points_.rows*points_.cols);
-		index_ = flann::Matrix<int>(thrust::raw_pointer_cast(d_index_->data()), points_.rows, points_.cols);
+		index_ = flann::cuda::DeviceMatrix<int>(thrust::raw_pointer_cast(d_index_->data()), points_.rows, points_.cols);
 
 		d_owners_ = new thrust::device_vector<int>(points_.rows*points_.cols, 0);
-		owners_ = flann::Matrix<int>(thrust::raw_pointer_cast(d_owners_->data()), points_.rows, points_.cols);
+		owners_ = flann::cuda::DeviceMatrix<int>(thrust::raw_pointer_cast(d_owners_->data()), points_.rows, points_.cols);
 		
 		d_leftright_ = new thrust::device_vector<int>(points_.rows * points_.cols, 0);
-		leftright_ = flann::Matrix<int>(thrust::raw_pointer_cast(d_leftright_->data()), points_.rows, points_.cols);
+		leftright_ = flann::cuda::DeviceMatrix<int>(thrust::raw_pointer_cast(d_leftright_->data()), points_.rows, points_.cols);
 		
 		//d_sorted_points_ = new thrust::device_vector<float>(points_.rows * points_.cols);
 		//d_sorted_points_ = new thrust::device_vector<float>(thrust::device_pointer_cast(points.ptr()), thrust::device_pointer_cast(points.ptr() + points.cols * points.rows));
@@ -479,23 +741,95 @@ class CudaKdTreeBuilder2
 	{
 		// Create GPU index arrays
 		thrust::counting_iterator<int> it(0);
-		thrust::copy(it, it + points_.rows, GpuMatBeginItr(index_));
+		thrust::copy(it, it + points_.rows, index_.begin());
 		for (int i = 1; i < points_.cols; ++i)
 		{
-			thrust::copy(GpuMatBeginItr(index_), GpuMatEndItr(index_), GpuMatBeginItr(index_, i));
+			thrust::copy(index_.begin(0), index_.end(0), index_.begin(i));
 		}
 		thrust::device_vector<float> tempv(points_.rows);
 		for (int i = 0; i < points_.cols; ++i)
 		{
-			thrust::copy(GpuMatBeginItr(points_, i), GpuMatEndItr(points_, i), tempv.begin());
-			thrust::sort_by_key(tempv.begin(), tempv.end(), GpuMatBeginItr(index_,i));
+			thrust::copy(points_.begin(i), points_.end(i), tempv.begin());
+			thrust::sort_by_key(tempv.begin(), tempv.end(), index_.begin(i));
 		}
+		// Initialize max and min
+		thrust::copy(thrust::device_pointer_cast(points_.ptr()), thrust::device_pointer_cast(points_.ptr() + points_.cols), thrust::device_pointer_cast(aabb_max_.ptr()));
+		thrust::copy(thrust::device_pointer_cast(points_.ptr()), thrust::device_pointer_cast(points_.ptr() + points_.cols), thrust::device_pointer_cast(aabb_min_.ptr()));
 
+		int last_node_count = 0;
+		for (int i = 0;; i++) 
+		{
+			cuda::kd_tree_builder_detail::SplitNodes2<float> sn;
+			sn.maxPointsPerNode = max_leaf_size_;
+			sn.node_count = thrust::raw_pointer_cast(allocation_info_.data() + NodeCount);
+			sn.nodes_allocated = thrust::raw_pointer_cast(allocation_info_.data() + NodesAllocated);
+			sn.out_of_space = thrust::raw_pointer_cast(allocation_info_.data() + OutOfSpace);
+			sn.child1_ = thrust::raw_pointer_cast(child1_->data());
+			sn.parent_ = thrust::raw_pointer_cast(parent_->data());
+			sn.splits = thrust::raw_pointer_cast(splits_->data());
+			sn.D = points_.cols;
+
+			thrust::counting_iterator<int> cit(0);
+			thrust::for_each(
+				thrust::make_zip_iterator(
+					thrust::make_tuple(
+						parent_->begin(), 
+						child1_->begin(), 
+						splits_->begin(), 
+						aabb_min_.begin() , 
+						aabb_max_.begin(), 
+						cit)),
+				thrust::make_zip_iterator(
+					thrust::make_tuple(
+						parent_->begin() + last_node_count, 
+						child1_->begin() + last_node_count, 
+						splits_->begin() + last_node_count, 
+						aabb_min_.begin(0) + last_node_count, // This quite possibly needs to be last_node_count*dimensions, however aab_min_.begin() should point to the beginning of a row and increment by a row 
+						aabb_max_.begin(0) + last_node_count, 
+						cit + last_node_count)),
+				sn);
+			// Get the allocation information from the run
+			thrust::host_vector<int> alloc_info = allocation_info_;
+
+			// no more nodes were split -> done
+			if (last_node_count == alloc_info[NodeCount]) 
+			{
+				break;
+			}
+
+			last_node_count = alloc_info[NodeCount];
+
+			// a node was un-splittable due to a lack of space
+			if (alloc_info[OutOfSpace] == 1) 
+			{
+				resize_node_vectors(alloc_info[NodesAllocated] * 2);
+				alloc_info[OutOfSpace] = 0;
+				alloc_info[NodesAllocated] *= 2;
+				allocation_info_ = alloc_info;
+			}
+		}
 	}
+
+	void resize_node_vectors(size_t new_size)
+	{
+		size_t add = new_size - child1_->size();
+		child1_->insert(child1_->end(), add, -1);
+		parent_->insert(parent_->end(), add, -1);
+		cuda::kd_tree_builder_detail::SplitInfo s;
+		s.left = 0;
+		s.right = 0;
+		splits_->insert(splits_->end(), add, s);
+		float f;
+		d_aabb_min_->insert(d_aabb_min_->end(), add*points_.cols, f);
+		d_aabb_max_->insert(d_aabb_max_->end(), add*points_.cols, f);
+		aabb_min_ = flann::cuda::DeviceMatrix<float>(thrust::raw_pointer_cast(d_aabb_min_->data()), add, points_.cols);
+		aabb_max_ = flann::cuda::DeviceMatrix<float>(thrust::raw_pointer_cast(d_aabb_max_->data()), add, points_.cols);
+	}
+
 	template<class Distance>
 	friend class KDTreeCuda3dIndex;
 protected:
-	flann::Matrix<float> points_;
+	flann::cuda::DeviceMatrix<float> points_;
 	// tree data, those are stored per-node
 
 	//! left child of each node. (right child==left child + 1, due to the alloc mechanism)
@@ -507,10 +841,10 @@ protected:
 	thrust::device_vector<cuda::kd_tree_builder_detail::SplitInfo>* splits_;
 	//! min aabb value of each node
 	thrust::device_vector<float>* d_aabb_min_;
-	flann::Matrix<float> aabb_min_;
+	flann::cuda::DeviceMatrix<float> aabb_min_;
 	//! max aabb value of each node
 	thrust::device_vector<float>* d_aabb_max_;
-	flann::Matrix<float> aabb_max_;
+	flann::cuda::DeviceMatrix<float> aabb_max_;
 
 	enum AllocationInfo
 	{
@@ -518,7 +852,7 @@ protected:
 		NodesAllocated = 1,
 		OutOfSpace = 2
 	};
-	thrust::device_vector<char> allocation_info_;
+	thrust::device_vector<int> allocation_info_;
 
 	int max_leaf_size_;
 
@@ -529,15 +863,15 @@ protected:
 	// indices
 	//thrust::device_vector<int>* index_x_, *index_y_, *index_z_;
 	thrust::device_vector<int>* d_index_;
-	flann::Matrix<int> index_;
+	flann::cuda::DeviceMatrix<int> index_;
 	// owner node
 	//thrust::device_vector<int>* owners_x_, *owners_y_, *owners_z_;
 	thrust::device_vector<int>* d_owners_;
-	flann::Matrix<int> owners_;
+	flann::cuda::DeviceMatrix<int> owners_;
 	// contains info about whether a point was partitioned to the left or right child after a split
 	//thrust::device_vector<int>* leftright_x_, *leftright_y_, *leftright_z_;
 	thrust::device_vector<int>* d_leftright_;
-	flann::Matrix<int> leftright_;
+	flann::cuda::DeviceMatrix<int> leftright_;
 	thrust::device_vector<int>* tmp_index_, *tmp_owners_, *tmp_misc_;
 	bool delete_node_info_;
 
