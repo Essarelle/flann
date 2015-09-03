@@ -8,7 +8,7 @@
 #include <thrust/scan.h>
 #include <flann/util/cutil_math.h>
 #include <stdlib.h>
-#include <flann/algorithms/kdtree_cuda_builder.h>
+#include <flann/algorithms/kdtree_cuda_builder.cuh>
 #include <flann/util/DeviceMatrix.h>
 
 namespace flann
@@ -67,7 +67,7 @@ namespace dyn_kd_tree_builder_detail
 			int point_ind3 = thrust::get<3>(data);*/
 			int leftChild = child1_[owner];
 			int split_dim;
-			float* dim_val = (float*)malloc(D_*sizeof(float));
+			//T* dim_val = (T*)malloc(D_*sizeof(T));
 			kd_tree_builder_detail::SplitInfo split;
 					
 			for (int i = 0; i < D_; ++i)
@@ -82,12 +82,21 @@ namespace dyn_kd_tree_builder_detail
 			// otherwise: load split data, and assign this index to the new owner
 			split = splits_[owner];
 			split_dim = split.split_dim;
-			for (int i = 0; i < D_; ++i)
+			if (split_dim >= D_)
 			{
-				float dim_val = points_[point_ind[i]][split_dim];
-				ownership_[index][i] = leftChild + (dim_val > split.split_val);
-				leftright_[index][i] = (dim_val > split.split_val);
+				printf("invalid split dim %d", split_dim);
 			}
+			else
+			{
+				for (int i = 0; i < D_; ++i)
+				{
+					T dim_val = points_[point_ind[i]][split_dim];
+					ownership_[index][i] = leftChild + (dim_val > split.split_val);
+					leftright_[index][i] = (dim_val > split.split_val);
+				}
+			}
+			
+
 		} // operator()
 	}; // MovePointsToChildNodes
 
@@ -245,7 +254,7 @@ namespace dyn_kd_tree_builder_detail
 	{
 	public:
 		CudaKdTreeBuilder(DeviceMatrix<T> points, int max_leaf_size) :
-			max_leaf_size_(max_leaf_size_), points_(points)
+			max_leaf_size_(max_leaf_size), points_(points)
 		{
 			int prealloc = points.rows / max_leaf_size_ * 16;
 			allocation_info_.resize(3);
@@ -276,6 +285,10 @@ namespace dyn_kd_tree_builder_detail
 
 			d_leftright_ = new thrust::device_vector<int>(points_.rows * points_.cols, 0);
 			leftright_ = flann::cuda::DeviceMatrix<int>(thrust::raw_pointer_cast(d_leftright_->data()), points_.rows, points_.cols);
+
+			tmp_index_ = new thrust::device_vector<int>(points_.rows);
+			tmp_owners_ = new thrust::device_vector<int>(points_.rows);
+			tmp_misc_ = new thrust::device_vector<int>(points_.rows);
 					
 			delete_node_info_ = false;
 		} // CudaKdTreeBuilder
@@ -285,15 +298,15 @@ namespace dyn_kd_tree_builder_detail
 			// Create GPU index arrays
 			thrust::counting_iterator<int> it(0);
 			thrust::copy(it, it + points_.rows, index_.begin());
-			for (int i = 1; i < points_.cols; ++i)
+			for (int d = 1; d < points_.cols; ++d)
 			{
-				thrust::copy(index_.begin(0), index_.end(0), index_.begin(i));
+				thrust::copy(index_.begin(0), index_.end(0), index_.begin(d));
 			}
 			thrust::device_vector<float> tempv(points_.rows);
-			for (int i = 0; i < points_.cols; ++i)
+			for (int d = 0; d < points_.cols; ++d)
 			{
-				thrust::copy(points_.begin(i), points_.end(i), tempv.begin());
-				thrust::sort_by_key(tempv.begin(), tempv.end(), index_.begin(i));
+				thrust::copy(points_.begin(d), points_.end(d), tempv.begin());
+				thrust::sort_by_key(tempv.begin(), tempv.end(), index_.begin(d));
 			}
 			// Initialize max and min
 			thrust::copy(thrust::device_pointer_cast(points_.ptr()), thrust::device_pointer_cast(points_.ptr() + points_.cols), thrust::device_pointer_cast(aabb_max_.ptr()));
@@ -372,11 +385,11 @@ namespace dyn_kd_tree_builder_detail
 							index_.end(0))),
 					sno);
 
-				for (int i = 0; i < points_.cols; ++i)
+				for (int d = 0; d < points_.cols; ++d)
 				{
-					separate_left_and_right_children(index_, owners_, *tmp_index_, *tmp_owners_, leftright_, i, i == 0);
-					thrust::copy(tmp_index_->begin(), tmp_index_->end(), index_.begin(i));
-					thrust::copy(tmp_owners_->begin(), tmp_owners_->end(), owners_.begin(i));
+					separate_left_and_right_children(index_, owners_, *tmp_index_, *tmp_owners_, leftright_, d, d == 0);
+					thrust::copy(tmp_index_->begin(), tmp_index_->end(), index_.begin(d));
+					thrust::copy(tmp_owners_->begin(), tmp_owners_->end(), owners_.begin(d));
 				}
 				update_leftright_and_aabb(points_, index_, owners_, *splits_, aabb_min_, aabb_max_);
 			}
@@ -468,10 +481,10 @@ namespace dyn_kd_tree_builder_detail
 			aabb_max_ = flann::cuda::DeviceMatrix<T>(thrust::raw_pointer_cast(d_aabb_max_->data()), add, points_.cols);
 		} // resize_node_vector
 
-		
-	protected:
-		template<class Distance>
-		friend class KDTreeCudaIndex;
+
+
+
+	
 		flann::cuda::DeviceMatrix<float> points_;
 		// tree data, those are stored per-node
 
