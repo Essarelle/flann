@@ -45,10 +45,22 @@
 #include <thrust/count.h>
 #include <flann/algorithms/kdtree_cuda_builder.h>
 #include <flann/algorithms/DynKdtree_cuda_builder.h>
-#include <flann/algorithms/kd_tree_cuda_index.cuh>
+#include <flann/algorithms/kdtree_cuda_index.cuh>
 #include <vector_types.h>
 namespace flann
 {
+	namespace cuda
+	{
+		namespace kd_tree_build_detail
+		{
+			std::ostream& operator <<(std::ostream& stream, const cuda::kd_tree_builder_detail::SplitInfo& s)
+			{
+				stream << "(split l/r: " << s.left << " " << s.right << "  split:" << s.split_dim << " " << s.split_val << ")";
+				return stream;
+			}
+		}
+	}
+
 
 namespace KdTreeCudaPrivate
 {
@@ -193,41 +205,7 @@ struct KDTreeCuda3dIndex<Distance>::GpuHelper
     }
 };
 
-template<typename Distance>
-struct KDTreeCuda3dIndex<Distance>::DynGpuHelper
-{
-	thrust::device_vector< cuda::kd_tree_builder_detail::SplitInfo >* gpu_splits_;
-	thrust::device_vector< int >* gpu_parent_;
-	thrust::device_vector< int >* gpu_child1_;
-	//thrust::device_vector< float4 >* gpu_aabb_min_;
-	//thrust::device_vector< float4 >* gpu_aabb_max_;
-	//thrust::device_vector<float4>* gpu_points_;
-	flann::cuda::DeviceMatrix<float> gpu_aabb_min_;
-	flann::cuda::DeviceMatrix<float> gpu_aabb_max_;
-	flann::cuda::DeviceMatrix<float> gpu_points_;
-	
-	thrust::device_vector<int>* gpu_vind_;
-	GpuHelper() : gpu_splits_(0), gpu_parent_(0), gpu_child1_(0), gpu_vind_(0){
-	}
-	~GpuHelper()
-	{
-		delete gpu_splits_;
-		gpu_splits_ = 0;
-		delete gpu_parent_;
-		gpu_parent_ = 0;
-		delete gpu_child1_;
-		gpu_child1_ = 0;
-		delete gpu_aabb_max_;
-		gpu_aabb_max_ = 0;
-		delete gpu_aabb_min_;
-		gpu_aabb_min_ = 0;
-		delete gpu_vind_;
-		gpu_vind_ = 0;
 
-		delete gpu_points_;
-		gpu_points_ = 0;
-	}
-};
 
 //! thrust transform functor
 //! transforms indices in the internal data set back to the original indices

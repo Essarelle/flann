@@ -138,6 +138,11 @@ public:
         uploadTreeToGpu();
     }
 
+	void buildIndex(const Matrix<ElementType>& dataset)
+	{
+
+	}
+
     flann_algorithm_t getType() const
     {
         return FLANN_INDEX_KDTREE_SINGLE;

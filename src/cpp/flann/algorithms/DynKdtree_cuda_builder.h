@@ -88,51 +88,6 @@ namespace dyn_kd_tree_builder_detail
 				ownership_[index][i] = leftChild + (dim_val > split.split_val);
 				leftright_[index][i] = (dim_val > split.split_val);
 			}
-
-
-			/*
-			for (int i = 0; i < D_; ++i)
-			{
-				dim_val[i] = 
-			}
-			switch (split_dim) 
-			{
-			case 0:
-				dim_val1 = x_[point_ind1];
-				dim_val2 = x_[point_ind2];
-				dim_val3 = x_[point_ind3];
-				break;
-			case 1:
-				dim_val1 = y_[point_ind1];
-				dim_val2 = y_[point_ind2];
-				dim_val3 = y_[point_ind3];
-				break;
-			default:
-				dim_val1 = z_[point_ind1];
-				dim_val2 = z_[point_ind2];
-				dim_val3 = z_[point_ind3];
-				break;
-
-			}
-
-			for (int i = 0; i < D_; ++i)
-			{
-						
-			}
-			int r1 = leftChild + (dim_val1 > split.split_val);
-			ox_[index] = r1;
-			int r2 = leftChild + (dim_val2 > split.split_val);
-			oy_[index] = r2;
-			oz_[index] = leftChild + (dim_val3 > split.split_val);
-
-			lrx_[index] = (dim_val1 > split.split_val);
-			lry_[index] = (dim_val2 > split.split_val);
-			lrz_[index] = (dim_val3 > split.split_val);
-			for (int i = 0; i < D_; ++i)
-			{
-				leftright_[index][i] = (dim_val[i] > split.split_val);
-			}
-			//free(dim_val);*/
 		} // operator()
 	}; // MovePointsToChildNodes
 
@@ -158,10 +113,12 @@ namespace dyn_kd_tree_builder_detail
 			int right;
 			int left = counts[i];
 			nodes[index].left = left;
-			if (i < nElements - 1) {
+			if (i < nElements - 1) 
+			{
 				right = counts[i + 1];
 			}
-			else { // index==nNodes
+			else 
+			{ // index==nNodes
 				right = maxPoints;
 			}
 			nodes[index].right = right;
@@ -195,8 +152,8 @@ namespace dyn_kd_tree_builder_detail
 			int& parent = thrust::get<0>(node);
 			int& child1 = thrust::get<1>(node);
 			kd_tree_builder_detail::SplitInfo& s = thrust::get<2>(node);
-			const float* aabbMin = &thrust::get<3>(node);
-			const float* aabbMax = &thrust::get<4>(node);
+			const T* aabbMin = &thrust::get<3>(node);
+			const T* aabbMax = &thrust::get<4>(node);
 			int my_index = thrust::get<5>(node);
 			bool split_node = false;
 			// first, each thread block counts the number of nodes that it needs to allocate...
@@ -245,7 +202,8 @@ namespace dyn_kd_tree_builder_detail
 			//(The whole "allocate-per-block-thing" is much faster than letting each element allocate
 			// its space on its own, because shared memory atomics are A LOT faster than
 			// global mem atomics!)
-			if (split_node && enough_space) {
+			if (split_node && enough_space) 
+			{
 				int left = block_left + offset_to_global;
 
 				splits[left].left = s.left;
@@ -254,27 +212,13 @@ namespace dyn_kd_tree_builder_detail
 				splits[left + 1].right = 0;
 
 				// split axis/position: middle of longest aabb extent
-				//float4 aabbDim=aabbMax-aabbMin;
-				float* aabbDim = (float*)malloc(D*sizeof(float));
-				for (int i = 0; i < D; ++i)
-				{
-					aabbDim[i] = aabbMax[i] - aabbMin[i];
-				}
-
+				
 				int maxDim = 0;
-				float maxDimLength = aabbDim[0];
+				T maxDimLength = aabbMax[0] - aabbMin[0];
 
-				float* splitVal = (float*)malloc(D*sizeof(float));
-				//float4 splitVal=(aabbMax+aabbMin);
-				for (int i = 0; i < D; ++i)
-				{
-					splitVal[i] = (aabbMax[i] + aabbMin[i])*0.5f;
-				}
-				//splitVal*=0.5f;
 				for (int i = 1; i < D; i++)
 				{
-					//float val = get_value_by_index(aabbDim,i);
-					float val = aabbDim[i];
+					T val = aabbMax[i] - aabbMin[i];
 					if (val > maxDimLength)
 					{
 						maxDim = i;
@@ -282,7 +226,7 @@ namespace dyn_kd_tree_builder_detail
 					}
 				}
 				s.split_dim = maxDim;
-				s.split_val = splitVal[maxDim]; // get_value_by_index(splitVal, maxDim);
+				s.split_val = (aabbMax[maxDim] + aabbMin[maxDim])*0.5f; 
 
 				child1_[my_index] = left;
 				splits[my_index] = s;
@@ -291,8 +235,6 @@ namespace dyn_kd_tree_builder_detail
 				parent_[left + 1] = my_index;
 				child1_[left] = -1;
 				child1_[left + 1] = -1;
-				free(aabbDim);
-				free(splitVal);
 			}
 		} // operator()
 	}; // SplitNodes

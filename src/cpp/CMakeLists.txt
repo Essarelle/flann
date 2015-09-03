@@ -139,5 +139,5 @@ endif()
 install (
     DIRECTORY flann
     DESTINATION include
-    FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp"
+    FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp" PATTERN "*.cuh"
 )
