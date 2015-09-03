@@ -45,6 +45,7 @@
 #include <thrust/count.h>
 #include <flann/algorithms/kdtree_cuda_builder.h>
 #include <flann/algorithms/DynKdtree_cuda_builder.h>
+#include <flann/algorithms/kd_tree_cuda_index.cuh>
 #include <vector_types.h>
 namespace flann
 {
@@ -190,6 +191,42 @@ struct KDTreeCuda3dIndex<Distance>::GpuHelper
         delete gpu_points_;
         gpu_points_=0;
     }
+};
+
+template<typename Distance>
+struct KDTreeCuda3dIndex<Distance>::DynGpuHelper
+{
+	thrust::device_vector< cuda::kd_tree_builder_detail::SplitInfo >* gpu_splits_;
+	thrust::device_vector< int >* gpu_parent_;
+	thrust::device_vector< int >* gpu_child1_;
+	//thrust::device_vector< float4 >* gpu_aabb_min_;
+	//thrust::device_vector< float4 >* gpu_aabb_max_;
+	//thrust::device_vector<float4>* gpu_points_;
+	flann::cuda::DeviceMatrix<float> gpu_aabb_min_;
+	flann::cuda::DeviceMatrix<float> gpu_aabb_max_;
+	flann::cuda::DeviceMatrix<float> gpu_points_;
+	
+	thrust::device_vector<int>* gpu_vind_;
+	GpuHelper() : gpu_splits_(0), gpu_parent_(0), gpu_child1_(0), gpu_vind_(0){
+	}
+	~GpuHelper()
+	{
+		delete gpu_splits_;
+		gpu_splits_ = 0;
+		delete gpu_parent_;
+		gpu_parent_ = 0;
+		delete gpu_child1_;
+		gpu_child1_ = 0;
+		delete gpu_aabb_max_;
+		gpu_aabb_max_ = 0;
+		delete gpu_aabb_min_;
+		gpu_aabb_min_ = 0;
+		delete gpu_vind_;
+		gpu_vind_ = 0;
+
+		delete gpu_points_;
+		gpu_points_ = 0;
+	}
 };
 
 //! thrust transform functor
@@ -766,7 +803,8 @@ void KDTreeCuda3dIndex<Distance>::uploadTreeToGpu()
         thrust::copy( thrust::device_pointer_cast((float4*)dataset_.ptr()),thrust::device_pointer_cast((float4*)(dataset_.ptr()))+size_,tmp.begin());
         
     }
-    else {
+    else 
+	{
         // k is limited to 4 -> use 128bit-alignment regardless of dimensionality
         // makes cpu search about 5% slower, but gpu can read a float4 w/ a single instruction
         // (vs a float2 and a float load for a float3 value)
@@ -783,7 +821,7 @@ void KDTreeCuda3dIndex<Distance>::uploadTreeToGpu()
         }
         thrust::copy((float4*)data_.ptr(),(float4*)(data_.ptr())+size_,tmp.begin());
     }
-
+	
     CudaKdTreeBuilder builder( tmp, leaf_max_size_ );
     builder.buildTree();
 
