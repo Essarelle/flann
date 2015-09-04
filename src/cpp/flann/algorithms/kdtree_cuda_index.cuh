@@ -84,6 +84,18 @@ namespace flann
 			
 			uploadTreeToGpu();
 		}
+		
+		void knnSearchGpu(const cuda::DeviceMatrix<ElementType>& queries, cuda::DeviceMatrix<int>& indices, cuda::DeviceMatrix<DistanceType>& dists, size_t knn, const SearchParams& params, cudaStream_t stream) const
+		{
+
+		}
+
+		int radiusSearchGpu(const cuda::DeviceMatrix<ElementType>& queries, cuda::DeviceMatrix<int>& indices,
+			cuda::DeviceMatrix<DistanceType>& dists, float radius, const SearchParams& params, cudaStream_t stream = NULL) const
+		{
+
+			return 0;
+		}
 		flann_algorithm_t getType() const
 		{
 			return FLANN_INDEX_KDTREE_SINGLE;
@@ -191,24 +203,41 @@ namespace flann
 	};// KDTreeCudaIndex
 
 	template<typename Distance>
-	class DynGpuIndex : public Index<Distance>
+	class DynGpuIndex : public GpuIndex<Distance>
 	{
 	public:
-		typedef typename Distance::ElementType ElementType;
-		typedef typename Distance::ResultType DistanceType;
-		typedef NNIndex<Distance> IndexType;
 		DynGpuIndex(const IndexParams& params, Distance distance = Distance())
-			: Index<Distance>(params, distance)
 		{
-			nnIndex_ = nullptr;
+			Index<Distnace>::index_params_ = params;
+			//nnIndex = new KDTreeCudaIndex<Distance>()
+
+
 		}
-		DynGpuIndex(const cuda::DeviceMatrix<ElementType> features, const IndexParams& params, Distance distance = Distance()) :
-			Index<Distance>(params, distance)
+		DynGpuIndex(const cuda::DeviceMatrix<ElementType> features, const IndexParams& params, Distance distance = Distance())
 		{
+			Index<Distnace>::index_params_ = params;
 			nnIndex_ = new KDTreeCudaIndex<Distance>(features, params, distance);
 			nnIndex_->buildIndex();
 		}
-
+		virtual int knnSearch(const cuda::DeviceMatrix<ElementType>& queries,
+			cuda::DeviceMatrix<int>& indices,
+			cuda::DeviceMatrix<DistanceType>& dists,
+			size_t knn,
+			const SearchParams& params,
+			cudaStream_t stream = NULL) const
+		{
+			nnIndex_->knnSearchGpu(queries, indices, dists, knn, params, stream);
+			return 0;
+		}
+		virtual int radiusSearch(const cuda::DeviceMatrix<ElementType>& queries,
+			cuda::DeviceMatrix<int>& indices,
+			cuda::DeviceMatrix<DistanceType>& dists,
+			float radius,
+			const SearchParams& params,
+			cudaStream_t stream = NULL) const
+		{
+			return nnIndex_->radiusSearchGpu(queries, indices, dists, radius, params, stream);
+		}
 	private:
 		KDTreeCudaIndex<Distance>* nnIndex_;
 

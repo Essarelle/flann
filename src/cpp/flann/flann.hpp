@@ -414,9 +414,6 @@ template<typename Distance>
 class GpuIndex: public Index<Distance>
 {
 public:
-	typedef typename Distance::ElementType ElementType;
-	typedef typename Distance::ResultType DistanceType;
-	typedef NNIndex<Distance> IndexType;
 	GpuIndex(const IndexParams& params, Distance distance = Distance())
 		: Index<Distance>(params, distance)
 	{
@@ -451,7 +448,7 @@ public:
 			Index<Distance>::nnIndex_ = create_index_by_type<Distance>(index_type, features, params, distance);
 		}
 	}
-	int knnSearch(const Matrix<ElementType>& queries,
+	virtual int knnSearch(const Matrix<ElementType>& queries,
 		Matrix<int>& indices,
 		Matrix<DistanceType>& dists,
 		size_t knn,
@@ -466,7 +463,7 @@ public:
 		}
 		return Index<Distance>::nnIndex_->knnSearch(queries, indices, dists, knn, params);
 	}
-	int radiusSearch(const Matrix<ElementType>& queries,
+	virtual int radiusSearch(const Matrix<ElementType>& queries,
 		Matrix<int>& indices,
 		Matrix<DistanceType>& dists,
 		float radius,
