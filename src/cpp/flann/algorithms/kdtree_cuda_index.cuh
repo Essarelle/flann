@@ -194,6 +194,9 @@ namespace flann
 	class DynGpuIndex : public Index<Distance>
 	{
 	public:
+		typedef typename Distance::ElementType ElementType;
+		typedef typename Distance::ResultType DistanceType;
+		typedef NNIndex<Distance> IndexType;
 		DynGpuIndex(const IndexParams& params, Distance distance = Distance())
 			: Index<Distance>(params, distance)
 		{
