@@ -414,6 +414,9 @@ template<typename Distance>
 class GpuIndex: public Index<Distance>
 {
 public:
+	typedef typename Distance::ElementType ElementType;
+	typedef typename Distance::ResultType DistanceType;
+	typedef NNIndex<Distance> IndexType;
 	GpuIndex(const IndexParams& params, Distance distance = Distance())
 		: Index<Distance>(params, distance)
 	{
