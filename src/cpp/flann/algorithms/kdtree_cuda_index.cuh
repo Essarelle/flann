@@ -563,9 +563,12 @@ namespace flann
 	};// KDTreeCudaIndex
 
 	template<typename Distance>
-	class DynGpuIndex : public GpuIndex<Distance>
+	class DynGpuIndex
 	{
 	public:
+		typedef typename Distance::ElementType ElementType;
+		typedef typename Distance::ResultType DistanceType;
+		typedef KDTreeCudaIndex<Distance> IndexType;
 		DynGpuIndex(const IndexParams& params, Distance distance = Distance())
 		{
 			Index<Distance>::index_params_ = params;
@@ -573,13 +576,13 @@ namespace flann
 
 
 		}
-		DynGpuIndex(const cuda::DeviceMatrix<ElementType> features, const IndexParams& params, Distance distance = Distance())
+		DynGpuIndex(cuda::DeviceMatrix<ElementType> features, const IndexParams& params, Distance distance = Distance()):
 		{
 			Index<Distance>::index_params_ = params;
 			nnIndex_ = new KDTreeCudaIndex<Distance>(features, params, distance);
 			nnIndex_->buildIndex();
 		}
-		virtual int knnSearch(const cuda::DeviceMatrix<ElementType>& queries,
+		virtual int knnSearch(cuda::DeviceMatrix<ElementType> queries,
 			cuda::DeviceMatrix<int>& indices,
 			cuda::DeviceMatrix<DistanceType>& dists,
 			size_t knn,
@@ -589,7 +592,7 @@ namespace flann
 			nnIndex_->knnSearchGpu(queries, indices, dists, knn, params, stream);
 			return 0;
 		}
-		virtual int radiusSearch(const cuda::DeviceMatrix<ElementType>& queries,
+		virtual int radiusSearch(cuda::DeviceMatrix<ElementType> queries,
 			cuda::DeviceMatrix<int>& indices,
 			cuda::DeviceMatrix<DistanceType>& dists,
 			float radius,

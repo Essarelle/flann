@@ -414,6 +414,7 @@ template<typename Distance>
 class GpuIndex: public Index<Distance>
 {
 public:
+
 	GpuIndex(const IndexParams& params, Distance distance = Distance())
 		: Index<Distance>(params, distance)
 	{
