@@ -146,29 +146,35 @@ struct KnnResultSet
     inline void
     insert(int index, DistanceType dist)
     {
-        if( foundNeighbors<k ) {
+        if( foundNeighbors<k ) 
+		{
             resultDist[foundNeighbors]=dist;
             resultIndex[foundNeighbors]=index;
-            if( foundNeighbors==k-1) {
-                if( useHeap ) {
+            if( foundNeighbors==k-1) 
+			{
+                if( useHeap ) 
+				{
                     flann::cuda::heap::make_heap(resultDist,resultIndex,k,GreaterThan<DistanceType>());
                     largestHeapDist=resultDist[0];
                 }
-                else {
+                else 
+				{
                     findLargestDistIndex();
                 }
-
             }
             foundNeighbors++;
         }
-        else if( dist < largestHeapDist ) {
-            if( useHeap ) {
+        else if( dist < largestHeapDist ) 
+		{
+            if( useHeap ) 
+			{
                 resultDist[0]=dist;
                 resultIndex[0]=index;
                 flann::cuda::heap::sift_down(resultDist,resultIndex,0,k,GreaterThan<DistanceType>());
                 largestHeapDist=resultDist[0];
             }
-            else {
+            else 
+			{
                 resultDist[maxDistIndex]=dist;
                 resultIndex[maxDistIndex]=index;
                 findLargestDistIndex();
@@ -184,13 +190,14 @@ struct KnnResultSet
         largestHeapDist=resultDist[0];
         maxDistIndex=0;
         for( int i=1; i<k; i++ )
-            if( resultDist[i] > largestHeapDist ) {
+            if( resultDist[i] > largestHeapDist ) 
+			{
                 maxDistIndex=i;
                 largestHeapDist=resultDist[i];
             }
     }
 
-    float* resultDist;
+	DistanceType* resultDist;
     int* resultIndex;
 
     __device__
@@ -199,7 +206,8 @@ struct KnnResultSet
     {
         resultDist=dists+stride*thread;
         resultIndex=index+stride*thread;
-        for( int i=0; i<stride; i++ ) {
+        for( int i=0; i<stride; i++ ) 
+		{
             resultDist[i]=INFINITY;
             resultIndex[i]=-1;
             //                  resultIndex[tid+i*blockDim.x]=-1;
@@ -211,9 +219,12 @@ struct KnnResultSet
     inline void
     finish()
     {
-        if( sorted ) {
-            if( !useHeap ) flann::cuda::heap::make_heap(resultDist,resultIndex,k,GreaterThan<DistanceType>());
-            for( int i=k-1; i>0; i-- ) {
+        if( sorted ) 
+		{
+            if( !useHeap ) 
+				flann::cuda::heap::make_heap(resultDist,resultIndex,k,GreaterThan<DistanceType>());
+            for( int i=k-1; i>0; i-- ) 
+			{
                 flann::cuda::swap( resultDist[0], resultDist[i] );
                 flann::cuda::swap( resultIndex[0], resultIndex[i] );
                 flann::cuda::heap::sift_down( resultDist,resultIndex, 0, i, GreaterThan<DistanceType>() );
