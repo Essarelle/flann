@@ -299,6 +299,10 @@ namespace flann
 			leaf_max_size_ = get_param(params, "leaf_max_size", 10);
 			gpu_helper_ = 0;
 		}
+		~KDTreeCudaIndex()
+		{
+			delete gpu_helper_;
+		}
 
 		virtual void buildIndex()
 		{
@@ -590,6 +594,10 @@ namespace flann
 			index_params_ = params;
 			nnIndex_ = new KDTreeCudaIndex<Distance>(features, params, distance);
 			//nnIndex_->buildIndex();
+		}
+		~DynGpuIndex()
+		{
+			delete nnIndex_;
 		}
 		virtual void buildIndex()
 		{
