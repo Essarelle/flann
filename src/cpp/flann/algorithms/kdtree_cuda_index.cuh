@@ -4,7 +4,7 @@
 #include <flann/algorithms/kdtree_cuda_3d_index.h> // For params class
 #include <flann/flann.hpp>
 #include <flann/algorithms/dist.h>
-
+#include <flann/util/cuda/result_set.h>
 namespace flann
 {
 	namespace DynKdTreeCudaPrivate
@@ -72,7 +72,7 @@ namespace flann
 					{
 						for (int i = split.left; i<split.right; ++i) 
 						{
-							T dist = distance.dist(elements[i], q, D);
+							T dist = distance.dist(thrust::raw_pointer_cast(elements[i]), q, D);
 							result.insert(i, dist);
 						}
 						backtrack = true;
@@ -90,8 +90,8 @@ namespace flann
 					// minimum possible distance between query point and a point inside the AABB
 					T mindistsq = 0;
 
-					T* aabbMin = aabbLow[otherChild];
-					T* aabbMax = aabbHigh[otherChild];
+					T* aabbMin = thrust::raw_pointer_cast(aabbLow[otherChild]);
+					T* aabbMax = thrust::raw_pointer_cast(aabbHigh[otherChild]);
 
 					for (int d = 0; d < D; ++d)
 					{
@@ -120,6 +120,7 @@ namespace flann
 				}
 			}
 		}
+		
 		template<typename T, typename GPUResultSet, typename Distance >
 		__global__
 			void nearestKernel(const cuda::kd_tree_builder_detail::SplitInfo* splits,
@@ -144,10 +145,17 @@ namespace flann
 			result.setResultLocation(thrust::raw_pointer_cast(resultDist.ptr()),
 				thrust::raw_pointer_cast(resultIdx.ptr()), tid, resultDist.stride / sizeof(T));
 
-			searchNeighbors(splits, child1, parent, aabbMin, aabbMax, elements, query[tid], result, dist);
+			searchNeighbors(splits, child1, parent, aabbMin, aabbMax, elements, thrust::raw_pointer_cast(query[tid]), result, dist);
 
 			result.finish();
 		}
+		struct isNotMinusOne
+		{
+			__host__ __device__
+				bool operator() (int i){
+				return i != -1;
+			}
+		};
 	}
 
 	
@@ -353,7 +361,7 @@ namespace flann
 				}
 				else
 				{
-					KdTreeCudaPrivate::nearestKernel << <blocksPerGrid, threadsPerBlock, 0, stream >> > (
+					DynKdTreeCudaPrivate::nearestKernel << <blocksPerGrid, threadsPerBlock, 0, stream >> > (
 						thrust::raw_pointer_cast(&((*gpu_helper_->gpu_splits_)[0])),
 						thrust::raw_pointer_cast(&((*gpu_helper_->gpu_child1_)[0])),
 						thrust::raw_pointer_cast(&((*gpu_helper_->gpu_parent_)[0])),
@@ -396,7 +404,7 @@ namespace flann
 			if (max_neighbors == 0) 
 			{
 				//thrust::device_vector<int> indicesDev(queries.rows* indices.stride);
-				DynKdTreeCudaPrivate::nearestKernel << <blocksPerGrid, threadsPerBlock, 0, stream >> > (thrust::raw_pointer_cast(&((*gpu_helper_->gpu_splits_)[0])),
+				DynKdTreeCudaPrivate::nearestKernel << <blocksPerGrid, threadsPerBlock, 0, stream >> > (
 					thrust::raw_pointer_cast(&((*gpu_helper_->gpu_splits_)[0])),
 					thrust::raw_pointer_cast(&((*gpu_helper_->gpu_child1_)[0])),
 					thrust::raw_pointer_cast(&((*gpu_helper_->gpu_parent_)[0])),
@@ -418,7 +426,7 @@ namespace flann
 				return 0;
 			}
 			if (use_heap) {
-				DynKdTreeCudaPrivate::nearestKernel << <blocksPerGrid, threadsPerBlock, 0, stream >> > (thrust::raw_pointer_cast(&((*gpu_helper_->gpu_splits_)[0])),
+				DynKdTreeCudaPrivate::nearestKernel << <blocksPerGrid, threadsPerBlock, 0, stream >> > (
 					thrust::raw_pointer_cast(&((*gpu_helper_->gpu_splits_)[0])),
 					thrust::raw_pointer_cast(&((*gpu_helper_->gpu_child1_)[0])),
 					thrust::raw_pointer_cast(&((*gpu_helper_->gpu_parent_)[0])),
@@ -432,7 +440,7 @@ namespace flann
 					distance);
 			}
 			else {
-				DynKdTreeCudaPrivate::nearestKernel << <blocksPerGrid, threadsPerBlock, 0, stream >> > (thrust::raw_pointer_cast(&((*gpu_helper_->gpu_splits_)[0])),
+				DynKdTreeCudaPrivate::nearestKernel << <blocksPerGrid, threadsPerBlock, 0, stream >> > (
 					thrust::raw_pointer_cast(&((*gpu_helper_->gpu_splits_)[0])),
 					thrust::raw_pointer_cast(&((*gpu_helper_->gpu_child1_)[0])),
 					thrust::raw_pointer_cast(&((*gpu_helper_->gpu_parent_)[0])),
@@ -446,11 +454,12 @@ namespace flann
 					distance);
 			}
 
-			thrust::transform(thrust::system::cuda::par.on(stream), id, id + max_neighbors*queries.rows, id, map_indices(thrust::raw_pointer_cast(&((*gpu_helper_->gpu_vind_))[0])));
+			thrust::transform(thrust::system::cuda::par.on(stream), indices.begin(), indices.end(), indices.begin(), 
+				DynKdTreeCudaPrivate::map_indices(thrust::raw_pointer_cast(&((*gpu_helper_->gpu_vind_))[0])));
 			if (stream == NULL)
 			{
 				cudaDeviceSynchronize();
-				return thrust::count_if(id, id + max_neighbors*queries.rows, isNotMinusOne());
+				return thrust::count_if(indices.begin(), indices.end(), DynKdTreeCudaPrivate::isNotMinusOne());
 			}
 			return queries.rows * max_neighbors;
 
@@ -571,15 +580,19 @@ namespace flann
 		typedef KDTreeCudaIndex<Distance> IndexType;
 		DynGpuIndex(const IndexParams& params, Distance distance = Distance())
 		{
-			Index<Distance>::index_params_ = params;
+			index_params_ = params;
 			//nnIndex = new KDTreeCudaIndex<Distance>()
 
 
 		}
-		DynGpuIndex(cuda::DeviceMatrix<ElementType> features, const IndexParams& params, Distance distance = Distance()):
+		DynGpuIndex(cuda::DeviceMatrix<ElementType> features, const IndexParams& params, Distance distance = Distance())
 		{
-			Index<Distance>::index_params_ = params;
+			index_params_ = params;
 			nnIndex_ = new KDTreeCudaIndex<Distance>(features, params, distance);
+			//nnIndex_->buildIndex();
+		}
+		virtual void buildIndex()
+		{
 			nnIndex_->buildIndex();
 		}
 		virtual int knnSearch(cuda::DeviceMatrix<ElementType> queries,
@@ -603,6 +616,7 @@ namespace flann
 		}
 	private:
 		KDTreeCudaIndex<Distance>* nnIndex_;
+		IndexParams index_params_;
 
 	};
 }
