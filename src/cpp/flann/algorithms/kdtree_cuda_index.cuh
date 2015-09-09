@@ -32,7 +32,7 @@ namespace flann
 			cuda::DeviceMatrix<T>& aabbHigh,
 			cuda::DeviceMatrix<T>& elements,
 			T* q,
-			GPUResultSet& result, 
+			GPUResultSet& result,
 			const Distance& distance = Distance())
 		{
 			const int D = elements.cols;
@@ -41,36 +41,36 @@ namespace flann
 			int current = 0;
 
 			cuda::kd_tree_builder_detail::SplitInfo split;
-			while (true) 
+			while (true)
 			{
-				if (current == -1) 
+				if (current == -1)
 					break;
 				split = splits[current];
 
 				T diff1;
 				diff1 = q[split.split_dim] - split.split_val;
-				
+
 
 				// children are next to each other: leftChild+1 == rightChild
 				int leftChild = child1[current];
 				int bestChild = leftChild;
 				int otherChild = leftChild;
 
-				if (diff1<0) 
+				if (diff1 < 0)
 				{
 					otherChild++;
 				}
-				else 
+				else
 				{
 					bestChild++;
 				}
 
-				if (!backtrack) 
+				if (!backtrack)
 				{
 					/* If this is a leaf node, then do check and return. */
-					if (leftChild == -1) 
+					if (leftChild == -1)
 					{
-						for (int i = split.left; i<split.right; ++i) 
+						for (int i = split.left; i < split.right; ++i)
 						{
 							T dist = distance.dist(thrust::raw_pointer_cast(elements[i]), q, D);
 							result.insert(i, dist);
@@ -79,13 +79,13 @@ namespace flann
 						lastNode = current;
 						current = parent[current];
 					}
-					else 
+					else
 					{ // go to closer child node
 						lastNode = current;
 						current = bestChild;
 					}
 				}
-				else 
+				else
 				{ // continue moving back up the tree or visit far node?
 					// minimum possible distance between query point and a point inside the AABB
 					T mindistsq = 0;
@@ -95,7 +95,7 @@ namespace flann
 
 					for (int d = 0; d < D; ++d)
 					{
-						if(q[d] < aabbMin[d])
+						if (q[d] < aabbMin[d])
 							mindistsq += distance.axisDist(q[d], aabbMin[d]);
 						else
 						{
@@ -105,14 +105,14 @@ namespace flann
 					}
 
 					//  the far node was NOT the last node (== not visited yet) AND there could be a closer point in it
-					if ((lastNode == bestChild) && 
-						mindistsq <= result.worstDist()) 
+					if ((lastNode == bestChild) &&
+						mindistsq <= result.worstDist())
 					{
 						lastNode = current;
 						current = otherChild;
 						backtrack = false;
 					}
-					else 
+					else
 					{
 						lastNode = current;
 						current = parent[current];
@@ -120,7 +120,7 @@ namespace flann
 				}
 			}
 		}
-		
+
 		template<typename T, typename GPUResultSet, typename Distance >
 		__global__
 			void nearestKernel(const cuda::kd_tree_builder_detail::SplitInfo* splits,
@@ -158,7 +158,7 @@ namespace flann
 		};
 	}
 
-	
+
 
 	template<typename T>
 	struct DynDistL2
@@ -215,12 +215,12 @@ namespace flann
 	template<class Distance>
 	struct DynGpuDist	{	};
 
-	template<typename T> 
+	template<typename T>
 	struct DynGpuDist< L2<T> >
 	{
 		typedef DynDistL2<T> type;
 	};
-	
+
 	template<typename T>
 	struct DynGpuDist< L1<T> >
 	{
@@ -268,7 +268,7 @@ namespace flann
 	};
 
 	template<typename Distance>
-	class KDTreeCudaIndex: public NNIndex<Distance>
+	class KDTreeCudaIndex : public NNIndex<Distance>
 	{
 	public:
 		typedef typename Distance::ElementType ElementType;
@@ -276,7 +276,7 @@ namespace flann
 		typedef NNIndex<Distance> BaseClass;
 
 		int visited_leafs;
-		
+
 		typedef bool needs_kdtree_distance;
 
 		KDTreeCudaIndex(
@@ -285,17 +285,17 @@ namespace flann
 			Distance d = Distance()
 			) :
 			BaseClass(params, d),
-				dataset_(inputData),
-				leaf_count_(0),
-				visited_leafs(0),
-				node_count_(0),
-				current_node_count_(0)
+			dataset_(inputData),
+			leaf_count_(0),
+			visited_leafs(0),
+			node_count_(0),
+			current_node_count_(0)
 		{
 			size_ = dataset_.rows;
 			dim_ = dataset_.cols;
 
 			int dim_param = get_param(params, "dim", -1);
-			if (dim_param>0) dim_ = dim_param;
+			if (dim_param > 0) dim_ = dim_param;
 			leaf_max_size_ = get_param(params, "leaf_max_size", 10);
 			gpu_helper_ = 0;
 		}
@@ -313,13 +313,13 @@ namespace flann
 			}
 			leaf_count_ = 0;
 			node_count_ = 0;
-			
+
 			uploadTreeToGpu();
 		}
-		
-		void knnSearchGpu(const cuda::DeviceMatrix<ElementType>& queries, 
-			cuda::DeviceMatrix<int>& indices, 
-			cuda::DeviceMatrix<DistanceType>& dists, 
+
+		void knnSearchGpu(const cuda::DeviceMatrix<ElementType>& queries,
+			cuda::DeviceMatrix<int>& indices,
+			cuda::DeviceMatrix<DistanceType>& dists,
 			size_t knn, const SearchParams& params, cudaStream_t stream) const
 		{
 			assert(indices.rows >= queries.rows);
@@ -328,6 +328,13 @@ namespace flann
 			assert(dists.cols == indices.cols && dists.stride == indices.stride);
 			int threadsPerBlock = 128;
 			int blocksPerGrid = (queries.rows + threadsPerBlock - 1) / threadsPerBlock;
+
+			if (queries.rows < 128)
+			{
+				threadsPerBlock = queries.rows;
+				blocksPerGrid = 1;
+			}
+
 			float epsError = 1 + params.eps;
 			bool sorted = params.sorted;
 			bool use_heap = params.use_heap;
@@ -359,8 +366,8 @@ namespace flann
 						gpu_helper_->gpu_points_,
 						queries,
 						indices,
-						dists, 
-						flann::cuda::KnnResultSet<float, true>(knn, sorted, epsError), 
+						dists,
+						flann::cuda::KnnResultSet<float, true>(knn, sorted, epsError),
 						distance);
 				}
 				else
@@ -379,7 +386,7 @@ namespace flann
 						);
 				}
 			}
-			thrust::transform(thrust::system::cuda::par.on(stream), indices.ptr(), indices.ptr() + knn*queries.rows, indices.ptr(), 
+			thrust::transform(thrust::system::cuda::par.on(stream), indices.ptr(), indices.ptr() + knn*queries.rows, indices.ptr(),
 				DynKdTreeCudaPrivate::map_indices(thrust::raw_pointer_cast(&((*gpu_helper_->gpu_vind_))[0])));
 			if (stream == NULL)
 				cudaDeviceSynchronize();
