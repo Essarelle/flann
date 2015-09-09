@@ -237,33 +237,21 @@ namespace flann
 	template<typename T>
 	struct DynGpuHelper
 	{
-		thrust::device_vector< cuda::kd_tree_builder_detail::SplitInfo >* gpu_splits_;
-		thrust::device_vector< int >* gpu_parent_;
-		thrust::device_vector< int >* gpu_child1_;
+		std::shared_ptr<thrust::device_vector< cuda::kd_tree_builder_detail::SplitInfo >> gpu_splits_;
+		std::shared_ptr<thrust::device_vector< int >> gpu_parent_;
+		std::shared_ptr<thrust::device_vector< int >> gpu_child1_;
 		thrust::device_vector<T> d_gpu_points_;
 		flann::cuda::DeviceMatrix<T> gpu_points_;
+		std::shared_ptr<thrust::device_vector<T>> d_gpu_aabb_min_;
 		flann::cuda::DeviceMatrix<T> gpu_aabb_min_;
+		std::shared_ptr<thrust::device_vector<T>> d_gpu_aabb_max_;
 		flann::cuda::DeviceMatrix<T> gpu_aabb_max_;
-		thrust::device_vector<int>* gpu_vind_;
+		std::shared_ptr<thrust::device_vector<int>> gpu_vind_;
 
-		DynGpuHelper() : gpu_splits_(0), gpu_parent_(0), gpu_child1_(0), gpu_vind_(0){}
+		DynGpuHelper(){}
 		~DynGpuHelper()
 		{
-			delete gpu_splits_;
-			gpu_splits_ = 0;
-			delete gpu_parent_;
-			gpu_parent_ = 0;
-			delete gpu_child1_;
-			gpu_child1_ = 0;
-			//delete gpu_aabb_max_;
-			//gpu_aabb_max_ = 0;
-			//delete gpu_aabb_min_;
-			//gpu_aabb_min_ = 0;
-			delete gpu_vind_;
-			gpu_vind_ = 0;
-
-			//delete gpu_points_;
-			//gpu_points_ = 0;
+			
 		}
 	};
 
@@ -297,11 +285,9 @@ namespace flann
 			int dim_param = get_param(params, "dim", -1);
 			if (dim_param>0) dim_ = dim_param;
 			leaf_max_size_ = get_param(params, "leaf_max_size", 10);
-			gpu_helper_ = 0;
 		}
 		~KDTreeCudaIndex()
 		{
-			delete gpu_helper_;
 		}
 
 		virtual void buildIndex()
@@ -524,8 +510,8 @@ namespace flann
 
 		virtual void uploadTreeToGpu()
 		{
-			delete gpu_helper_;
-			gpu_helper_ = new DynGpuHelper<ElementType>;
+			
+			gpu_helper_.reset(new DynGpuHelper<ElementType>());
 			gpu_helper_->d_gpu_points_.resize(dataset_.rows * dataset_.cols);
 			gpu_helper_->gpu_points_ = flann::cuda::DeviceMatrix<ElementType>(thrust::raw_pointer_cast(gpu_helper_->d_gpu_points_.data()),
 				dataset_.rows, dataset_.cols);
@@ -536,11 +522,14 @@ namespace flann
 			gpu_helper_->gpu_splits_ = builder.splits_;
 			gpu_helper_->gpu_aabb_max_ = builder.aabb_max_;
 			gpu_helper_->gpu_aabb_min_ = builder.aabb_min_;
+			gpu_helper_->d_gpu_aabb_max_ = builder.d_aabb_max_;
+			gpu_helper_->d_gpu_aabb_min_ = builder.d_aabb_min_;
+
 			gpu_helper_->gpu_child1_ = builder.child1_;
 			gpu_helper_->gpu_parent_ = builder.parent_;
 			
 			if (gpu_helper_->gpu_vind_ == nullptr)
-				gpu_helper_->gpu_vind_ = new thrust::device_vector<int>();
+				gpu_helper_->gpu_vind_.reset(new thrust::device_vector<int>());
 
 			gpu_helper_->gpu_vind_->insert(gpu_helper_->gpu_vind_->begin(), builder.index_.begin(0), builder.index_.end(0));
 			
@@ -555,7 +544,7 @@ namespace flann
 		}
 		
 		friend class DynGpuHelper<ElementType>;
-		DynGpuHelper<ElementType>* gpu_helper_;
+		std::shared_ptr<DynGpuHelper<ElementType>> gpu_helper_;
 
 		flann::cuda::DeviceMatrix<ElementType> dataset_;
 
@@ -585,19 +574,15 @@ namespace flann
 		DynGpuIndex(const IndexParams& params, Distance distance = Distance())
 		{
 			index_params_ = params;
-			//nnIndex = new KDTreeCudaIndex<Distance>()
-
-
 		}
 		DynGpuIndex(cuda::DeviceMatrix<ElementType> features, const IndexParams& params, Distance distance = Distance())
 		{
 			index_params_ = params;
-			nnIndex_ = new KDTreeCudaIndex<Distance>(features, params, distance);
-			//nnIndex_->buildIndex();
+			nnIndex_.reset(new KDTreeCudaIndex<Distance>(features, params, distance));
 		}
 		~DynGpuIndex()
 		{
-			delete nnIndex_;
+			
 		}
 		virtual void buildIndex()
 		{
@@ -623,7 +608,7 @@ namespace flann
 			return nnIndex_->radiusSearchGpu(queries, indices, dists, radius, params, stream);
 		}
 	private:
-		KDTreeCudaIndex<Distance>* nnIndex_;
+		std::shared_ptr<KDTreeCudaIndex<Distance>> nnIndex_;
 		IndexParams index_params_;
 
 	};
