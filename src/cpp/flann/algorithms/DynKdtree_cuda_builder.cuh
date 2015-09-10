@@ -131,10 +131,10 @@ namespace dyn_kd_tree_builder_detail
 				right = maxPoints;
 			}
 			nodes[index].right = right;
-			for (int i = 0; i < aabbMin.cols; ++i)
+			for (int d = 0; d < aabbMin.cols; ++d)
 			{
-				aabbMin[index][i] = points_[indecies_[left][i]][i];
-				aabbMax[index][i] = points_[indecies_[right - 1][i]][i];
+				aabbMin[index][d] = points_[indecies_[left][d]][d];
+				aabbMax[index][d] = points_[indecies_[right - 1][d]][d];
 			}
 		} // operator()
 	}; // SetLeftAndRightAndAABB
@@ -297,7 +297,8 @@ namespace dyn_kd_tree_builder_detail
 		{
 			// Create GPU index arrays
 			thrust::counting_iterator<int> it(0);
-			thrust::copy(it, it + points_.rows, index_.begin());
+			//thrust::copy(it, it + points_.rows, index_.begin());
+			thrust::sequence(index_.begin(0), index_.end(0));
 			for (int d = 1; d < points_.cols; ++d)
 			{
 				thrust::copy(index_.begin(0), index_.end(0), index_.begin(d));
@@ -315,7 +316,7 @@ namespace dyn_kd_tree_builder_detail
 			int last_node_count = 0;
 			for (int i = 0;; i++)
 			{
-				SplitNodes<float> sn;
+				SplitNodes<T> sn;
 					sn.maxPointsPerNode = max_leaf_size_;
 					sn.node_count = thrust::raw_pointer_cast(allocation_info_.data() + NodeCount);
 					sn.nodes_allocated = thrust::raw_pointer_cast(allocation_info_.data() + NodesAllocated);
@@ -332,8 +333,8 @@ namespace dyn_kd_tree_builder_detail
 							parent_->begin(),
 							child1_->begin(),
 							splits_->begin(),
-							aabb_min_.begin(),
-							aabb_max_.begin(),
+							aabb_min_.begin(0),
+							aabb_max_.begin(0),
 							cit)),
 					thrust::make_zip_iterator(
 						thrust::make_tuple(
@@ -473,6 +474,8 @@ namespace dyn_kd_tree_builder_detail
 			cuda::kd_tree_builder_detail::SplitInfo s;
 				s.left = 0;
 				s.right = 0;
+				s.split_dim = -1;
+				s.split_val = 0;
 			splits_->insert(splits_->end(), add, s);
 			float f;
 			d_aabb_min_->insert(d_aabb_min_->end(), add*points_.cols, f);

@@ -32,7 +32,7 @@ namespace flann
 			cuda::DeviceMatrix<T>& aabbHigh,
 			cuda::DeviceMatrix<T>& elements,
 			T* q,
-			GPUResultSet& result,
+			GPUResultSet& result, 
 			const Distance& distance = Distance())
 		{
 			const int D = elements.cols;
@@ -41,36 +41,39 @@ namespace flann
 			int current = 0;
 
 			cuda::kd_tree_builder_detail::SplitInfo split;
-			while (true)
+			while (true) 
 			{
-				if (current == -1)
+				if (current == -1) 
 					break;
 				split = splits[current];
-
+				if (split.split_dim > D || split.split_dim == -1)
+				{
+					printf("Invalid split %d\n", split.split_dim);
+				}
 				T diff1;
 				diff1 = q[split.split_dim] - split.split_val;
-
+				
 
 				// children are next to each other: leftChild+1 == rightChild
 				int leftChild = child1[current];
 				int bestChild = leftChild;
 				int otherChild = leftChild;
 
-				if (diff1 < 0)
+				if (diff1<0) 
 				{
 					otherChild++;
 				}
-				else
+				else 
 				{
 					bestChild++;
 				}
 
-				if (!backtrack)
+				if (!backtrack) 
 				{
 					/* If this is a leaf node, then do check and return. */
-					if (leftChild == -1)
+					if (leftChild == -1) 
 					{
-						for (int i = split.left; i < split.right; ++i)
+						for (int i = split.left; i<split.right; ++i) 
 						{
 							T dist = distance.dist(thrust::raw_pointer_cast(elements[i]), q, D);
 							result.insert(i, dist);
@@ -79,13 +82,13 @@ namespace flann
 						lastNode = current;
 						current = parent[current];
 					}
-					else
+					else 
 					{ // go to closer child node
 						lastNode = current;
 						current = bestChild;
 					}
 				}
-				else
+				else 
 				{ // continue moving back up the tree or visit far node?
 					// minimum possible distance between query point and a point inside the AABB
 					T mindistsq = 0;
@@ -95,7 +98,7 @@ namespace flann
 
 					for (int d = 0; d < D; ++d)
 					{
-						if (q[d] < aabbMin[d])
+						if(q[d] < aabbMin[d])
 							mindistsq += distance.axisDist(q[d], aabbMin[d]);
 						else
 						{
@@ -105,14 +108,14 @@ namespace flann
 					}
 
 					//  the far node was NOT the last node (== not visited yet) AND there could be a closer point in it
-					if ((lastNode == bestChild) &&
-						mindistsq <= result.worstDist())
+					if ((lastNode == bestChild) && 
+						mindistsq <= result.worstDist()) 
 					{
 						lastNode = current;
 						current = otherChild;
 						backtrack = false;
 					}
-					else
+					else 
 					{
 						lastNode = current;
 						current = parent[current];
@@ -120,7 +123,7 @@ namespace flann
 				}
 			}
 		}
-
+		
 		template<typename T, typename GPUResultSet, typename Distance >
 		__global__
 			void nearestKernel(const cuda::kd_tree_builder_detail::SplitInfo* splits,
@@ -132,12 +135,28 @@ namespace flann
 			cuda::DeviceMatrix<T> query,
 			cuda::DeviceMatrix<int> resultIdx,
 			cuda::DeviceMatrix<T> resultDist,
-			GPUResultSet result, Distance dist = Distance())
+			GPUResultSet result, Distance dist = Distance(), bool useShared = true)
 		{
 			typedef T DistanceType;
 			typedef T ElementType;
-
 			size_t tid = blockDim.x*blockIdx.x + threadIdx.x;
+
+			extern __shared__ T shared_query[];
+			// Load the queries into shared L2 cache
+			T* myQuery;
+			if (useShared)
+			{
+				myQuery = shared_query + threadIdx.x*query.cols;
+				T* inputQuery = thrust::raw_pointer_cast(query[tid]);
+				for (int i = 0; i < query.cols; ++i)
+				{
+					myQuery[i] = inputQuery[i];
+				}
+			}
+			else
+			{
+				myQuery = thrust::raw_pointer_cast(query[tid]);
+			}			
 
 			if (tid >= query.rows)
 				return;
@@ -145,7 +164,7 @@ namespace flann
 			result.setResultLocation(thrust::raw_pointer_cast(resultDist.ptr()),
 				thrust::raw_pointer_cast(resultIdx.ptr()), tid, resultDist.stride / sizeof(T));
 
-			searchNeighbors(splits, child1, parent, aabbMin, aabbMax, elements, thrust::raw_pointer_cast(query[tid]), result, dist);
+			searchNeighbors(splits, child1, parent, aabbMin, aabbMax, elements, myQuery, result, dist);
 
 			result.finish();
 		}
@@ -158,7 +177,7 @@ namespace flann
 		};
 	}
 
-
+	
 
 	template<typename T>
 	struct DynDistL2
@@ -215,12 +234,12 @@ namespace flann
 	template<class Distance>
 	struct DynGpuDist	{	};
 
-	template<typename T>
+	template<typename T> 
 	struct DynGpuDist< L2<T> >
 	{
 		typedef DynDistL2<T> type;
 	};
-
+	
 	template<typename T>
 	struct DynGpuDist< L1<T> >
 	{
@@ -256,7 +275,7 @@ namespace flann
 	};
 
 	template<typename Distance>
-	class KDTreeCudaIndex : public NNIndex<Distance>
+	class KDTreeCudaIndex: public NNIndex<Distance>
 	{
 	public:
 		typedef typename Distance::ElementType ElementType;
@@ -264,7 +283,7 @@ namespace flann
 		typedef NNIndex<Distance> BaseClass;
 
 		int visited_leafs;
-
+		
 		typedef bool needs_kdtree_distance;
 
 		KDTreeCudaIndex(
@@ -273,17 +292,17 @@ namespace flann
 			Distance d = Distance()
 			) :
 			BaseClass(params, d),
-			dataset_(inputData),
-			leaf_count_(0),
-			visited_leafs(0),
-			node_count_(0),
-			current_node_count_(0)
+				dataset_(inputData),
+				leaf_count_(0),
+				visited_leafs(0),
+				node_count_(0),
+				current_node_count_(0)
 		{
 			size_ = dataset_.rows;
 			dim_ = dataset_.cols;
 
 			int dim_param = get_param(params, "dim", -1);
-			if (dim_param > 0) dim_ = dim_param;
+			if (dim_param>0) dim_ = dim_param;
 			leaf_max_size_ = get_param(params, "leaf_max_size", 10);
 		}
 		~KDTreeCudaIndex()
@@ -299,35 +318,36 @@ namespace flann
 			}
 			leaf_count_ = 0;
 			node_count_ = 0;
-
+			
 			uploadTreeToGpu();
 		}
-
-		void knnSearchGpu(const cuda::DeviceMatrix<ElementType>& queries,
-			cuda::DeviceMatrix<int>& indices,
-			cuda::DeviceMatrix<DistanceType>& dists,
+		
+		void knnSearchGpu(const cuda::DeviceMatrix<ElementType>& queries, 
+			cuda::DeviceMatrix<int>& indices, 
+			cuda::DeviceMatrix<DistanceType>& dists, 
 			size_t knn, const SearchParams& params, cudaStream_t stream) const
 		{
 			assert(indices.rows >= queries.rows);
 			assert(dists.rows >= queries.rows);
 			assert(int(indices.cols) >= knn);
 			assert(dists.cols == indices.cols && dists.stride == indices.stride);
-			int threadsPerBlock = 128;
+			int threadsPerBlock = 512;
 			int blocksPerGrid = (queries.rows + threadsPerBlock - 1) / threadsPerBlock;
-
-			if (queries.rows < 128)
-			{
-				threadsPerBlock = queries.rows;
-				blocksPerGrid = 1;
-			}
-
 			float epsError = 1 + params.eps;
 			bool sorted = params.sorted;
 			bool use_heap = params.use_heap;
 			typename DynGpuDist<Distance>::type distance;
 			if (knn == 1)
 			{
-				DynKdTreeCudaPrivate::nearestKernel << <blocksPerGrid, threadsPerBlock, 0, stream >> > (
+				size_t sharedMem = 512 * queries.cols * sizeof(ElementType);
+				cudaDeviceProp properties;
+				int device;
+				cudaGetDevice(&device);
+				cudaGetDeviceProperties(&properties, device);
+				if (sharedMem >= properties.sharedMemPerBlock)
+					sharedMem = 0;
+
+				DynKdTreeCudaPrivate::nearestKernel << <blocksPerGrid, threadsPerBlock, sharedMem, stream >> > (
 					thrust::raw_pointer_cast(&((*gpu_helper_->gpu_splits_)[0])),
 					thrust::raw_pointer_cast(&((*gpu_helper_->gpu_child1_)[0])),
 					thrust::raw_pointer_cast(&((*gpu_helper_->gpu_parent_)[0])),
@@ -337,7 +357,7 @@ namespace flann
 					queries,
 					indices,
 					dists,
-					flann::cuda::SingleResultSet<float>(epsError), distance);
+					flann::cuda::SingleResultSet<float>(epsError), distance, sharedMem != 0);
 			}
 			else
 			{
@@ -352,8 +372,8 @@ namespace flann
 						gpu_helper_->gpu_points_,
 						queries,
 						indices,
-						dists,
-						flann::cuda::KnnResultSet<float, true>(knn, sorted, epsError),
+						dists, 
+						flann::cuda::KnnResultSet<float, true>(knn, sorted, epsError), 
 						distance);
 				}
 				else
@@ -372,7 +392,7 @@ namespace flann
 						);
 				}
 			}
-			thrust::transform(thrust::system::cuda::par.on(stream), indices.ptr(), indices.ptr() + knn*queries.rows, indices.ptr(),
+			thrust::transform(thrust::system::cuda::par.on(stream), indices.ptr(), indices.ptr() + knn*queries.rows, indices.ptr(), 
 				DynKdTreeCudaPrivate::map_indices(thrust::raw_pointer_cast(&((*gpu_helper_->gpu_vind_))[0])));
 			if (stream == NULL)
 				cudaDeviceSynchronize();
@@ -395,7 +415,7 @@ namespace flann
 			bool use_heap = params.use_heap;
 
 			typename DynGpuDist<Distance>::type distance;
-			int threadsPerBlock = 128;
+			int threadsPerBlock = 512;
 			int blocksPerGrid = (queries.rows + threadsPerBlock - 1) / threadsPerBlock;
 
 			if (max_neighbors == 0) 
@@ -531,7 +551,11 @@ namespace flann
 			gpu_helper_->gpu_aabb_min_ = builder.aabb_min_;
 			gpu_helper_->d_gpu_aabb_max_ = builder.d_aabb_max_;
 			gpu_helper_->d_gpu_aabb_min_ = builder.d_aabb_min_;
-
+			thrust::host_vector<cuda::kd_tree_builder_detail::SplitInfo> h_splits = *builder.splits_;
+			for (auto itr = h_splits.begin(); itr != h_splits.end(); ++itr)
+			{
+				std::cout << (*itr).left << " " << (*itr).right << " " << (*itr).split_dim << std::endl;
+			}
 			gpu_helper_->gpu_child1_ = builder.child1_;
 			gpu_helper_->gpu_parent_ = builder.parent_;
 			
@@ -544,6 +568,7 @@ namespace flann
 			{
 				thrust::gather(builder.index_.begin(0), builder.index_.end(0), dataset_.begin(i), gpu_helper_->gpu_points_.begin(i));
 			}
+
 			
 
 			//thrust::gather(builder.index_.begin(0), builder.index_.end(0), )
