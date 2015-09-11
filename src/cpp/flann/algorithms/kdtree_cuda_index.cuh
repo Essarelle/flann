@@ -576,17 +576,6 @@ namespace flann
 			gpu_helper_->gpu_aabb_min_ = builder.aabb_min_;
 			gpu_helper_->d_gpu_aabb_max_ = builder.d_aabb_max_;
 			gpu_helper_->d_gpu_aabb_min_ = builder.d_aabb_min_;
-			thrust::host_vector<cuda::kd_tree_builder_detail::SplitInfo> h_splits = *builder.splits_;
-			int count = 0;
-			int count2 = 0;
-			for (auto itr = h_splits.begin(); itr != h_splits.end(); ++itr, ++count2)
-			{
-				if (((*itr).split_dim > 3 || (*itr).split_dim == -1) && count < 100)
-				{
-					std::cout << "Invalid split dimension: " << ++count << " at index: " << count2 << " " << (*itr).split_dim << std::endl;
-				}
-					
-			}
 			gpu_helper_->gpu_child1_ = builder.child1_;
 			gpu_helper_->gpu_parent_ = builder.parent_;
 			
@@ -599,11 +588,6 @@ namespace flann
 			{
 				thrust::gather(builder.index_.begin(0), builder.index_.end(0), dataset_.begin(i), gpu_helper_->gpu_points_.begin(i));
 			}
-
-			
-
-			//thrust::gather(builder.index_.begin(0), builder.index_.end(0), )
-			//gpu_helper_->gpu_vind_ = builder.index_;
 		}
 		
 		friend class DynGpuHelper<ElementType>;

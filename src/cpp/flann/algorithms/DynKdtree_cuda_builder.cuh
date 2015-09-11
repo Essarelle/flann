@@ -45,14 +45,11 @@ namespace dyn_kd_tree_builder_detail
 		kd_tree_builder_detail::SplitInfo* splits_;
 
 		// coordinate values
-		//float* x_, *y_, *z_;
 		DeviceMatrix<T> points_;
 		// owner indices -> which node does the point belong to?
 		DeviceMatrix<int> ownership_;
-		//int* ox_, *oy_, *oz_;
 		// temp info: will be set to 1 of a point is moved to the right child node, 0 otherwise
 		// (used later in the scan op to separate the points of the children into continuous ranges)
-		//int* lrx_, *lry_, *lrz_;
 		DeviceMatrix<int> leftright_;
 		const int D_;
 		__device__
@@ -62,12 +59,8 @@ namespace dyn_kd_tree_builder_detail
 
 			int owner = ownership_[index][0]; // before a split, all points at the same position in the index array have the same owner
 			int* point_ind = &thrust::get<1>(data);
-			/*int point_ind1 = thrust::get<1>(data);
-			int point_ind2 = thrust::get<2>(data);
-			int point_ind3 = thrust::get<3>(data);*/
 			int leftChild = child1_[owner];
 			int split_dim;
-			//T* dim_val = (T*)malloc(D_*sizeof(T));
 			kd_tree_builder_detail::SplitInfo split;
 					
 			for (int i = 0; i < D_; ++i)
@@ -105,6 +98,7 @@ namespace dyn_kd_tree_builder_detail
 	{
 		int maxPoints;
 		int nElements;
+		int splitSize;
 
 		kd_tree_builder_detail::SplitInfo* nodes;
 		int* counts;
@@ -113,12 +107,15 @@ namespace dyn_kd_tree_builder_detail
 		DeviceMatrix<T> aabbMax;
 		DeviceMatrix<T> points_;
 		DeviceMatrix<int> indecies_;
-		//const int* ix, *iy, *iz;
 
 		__host__ __device__
 			void operator()(int i)
 		{
 			int index = labels[i];
+			if (index > splitSize)
+			{
+				printf("Index > splitSize");
+			}
 			int right;
 			int left = counts[i];
 			nodes[index].left = left;
@@ -127,14 +124,17 @@ namespace dyn_kd_tree_builder_detail
 				right = counts[i + 1];
 			}
 			else 
-			{ // index==nNodes
+			{
 				right = maxPoints;
 			}
 			nodes[index].right = right;
 			for (int d = 0; d < aabbMin.cols; ++d)
 			{
-				aabbMin[index][d] = points_[indecies_[left][d]][d];
-				aabbMax[index][d] = points_[indecies_[right - 1][d]][d];
+				int leftIndex = indecies_[left][d];
+				int rightIndex = indecies_[right - 1][d];
+
+				aabbMin[index][d] = points_[leftIndex][d];
+				aabbMax[index][d] = points_[rightIndex][d];
 			}
 		} // operator()
 	}; // SetLeftAndRightAndAABB
@@ -156,7 +156,7 @@ namespace dyn_kd_tree_builder_detail
 		int D;
 
 		__device__
-			void operator()(thrust::tuple<int&, int&, kd_tree_builder_detail::SplitInfo&, T&, T&, int> node) // float4: aabbMin, aabbMax
+			void operator()(thrust::tuple<int&, int&, kd_tree_builder_detail::SplitInfo&, T&, T&, int> node)
 		{
 			int& parent = thrust::get<0>(node);
 			int& child1 = thrust::get<1>(node);
@@ -316,8 +316,13 @@ namespace dyn_kd_tree_builder_detail
 				thrust::sort_by_key(tempv.begin(), tempv.end(), index_.begin(d));
 			}
 			// Initialize max and min
-			thrust::copy(thrust::device_pointer_cast(points_.ptr()), thrust::device_pointer_cast(points_.ptr() + points_.cols), thrust::device_pointer_cast(aabb_max_.ptr()));
-			thrust::copy(thrust::device_pointer_cast(points_.ptr()), thrust::device_pointer_cast(points_.ptr() + points_.cols), thrust::device_pointer_cast(aabb_min_.ptr()));
+			for (int d = 0; d < points_.cols; ++d)
+			{
+				int idxMin = (*d_index_)[d];
+				int idxMax = (*d_index_)[(points_.rows - 1) * points_.cols + d];
+				cudaMemcpy((void*)(thrust::raw_pointer_cast((*d_aabb_max_).data()) + d), (void*)(thrust::raw_pointer_cast(points_[idxMin]) + d), sizeof(T), cudaMemcpyDeviceToDevice);
+				cudaMemcpy((void*)(thrust::raw_pointer_cast((*d_aabb_min_).data()) + d), (void*)(thrust::raw_pointer_cast(points_[idxMax]) + d), sizeof(T), cudaMemcpyDeviceToDevice);
+			}
 
 			int last_node_count = 0;
 			for (int i = 0;; i++)
@@ -327,8 +332,8 @@ namespace dyn_kd_tree_builder_detail
 				int index = 0;
 				for (auto itr = h_splits.begin(); itr != h_splits.end(); ++itr, ++index)
 				{
-					if ((*itr).split_dim > 3 && count < 100)
-						std::cout << "Iteration: " << i << " Invalid split " << ++count << " at index: " << index << std::endl;
+					if ((*itr).split_dim > 3 && count < 3)
+						std::cout << "0-Iteration: " << i << " Invalid split " << ++count << " at index: " << index << std::endl;
 
 				}
 
@@ -362,6 +367,15 @@ namespace dyn_kd_tree_builder_detail
 							aabb_max_.begin(0) + last_node_count,
 							cit + last_node_count)),
 					sn);
+				h_splits = *splits_;
+				count = 0;
+				index = 0;
+				for (auto itr = h_splits.begin(); itr != h_splits.end(); ++itr, ++index)
+				{
+					if ((*itr).split_dim > 3 && count < 3)
+						std::cout << "1-Iteration: " << i << " Invalid split " << ++count << " at index: " << index << std::endl;
+
+				}
 				// Get the allocation information from the run
 				thrust::host_vector<int> alloc_info = allocation_info_;
 
@@ -402,18 +416,42 @@ namespace dyn_kd_tree_builder_detail
 							ci0 + points_.rows,
 							index_.end(0))),
 					sno);
+				h_splits = *splits_;
+				count = 0;
+				index = 0;
+				for (auto itr = h_splits.begin(); itr != h_splits.end(); ++itr, ++index)
+				{
+					if ((*itr).split_dim > 3 && count < 3)
+						std::cout << "2-Iteration: " << i << " Invalid split " << ++count << " at index: " << index << std::endl;
 
+				}
+				
 				for (int d = 0; d < points_.cols; ++d)
 				{
 					separate_left_and_right_children(index_, owners_, *tmp_index_, *tmp_owners_, leftright_, d, d == 0);
 					thrust::copy(tmp_index_->begin(), tmp_index_->end(), index_.begin(d));
 					thrust::copy(tmp_owners_->begin(), tmp_owners_->end(), owners_.begin(d));
 				}
+				h_splits = *splits_;
+				count = 0;
+				index = 0;
+				for (auto itr = h_splits.begin(); itr != h_splits.end(); ++itr, ++index)
+				{
+					if ((*itr).split_dim > 3 && count < 3)
+						std::cout << "3-Iteration: " << i << " Invalid split " << ++count << " at index: " << index << std::endl;
+
+				}
 				update_leftright_and_aabb(points_, index_, owners_, *splits_, aabb_min_, aabb_max_);
+				h_splits = *splits_;
+				count = 0;
+				index = 0;
+				for (auto itr = h_splits.begin(); itr != h_splits.end(); ++itr, ++index)
+				{
+					if ((*itr).split_dim > 3 && count < 3)
+						std::cout << "4-Iteration: " << i << " Invalid split " << ++count << " at index: " << index << std::endl;
+
+				}
 			}
-			thrust::host_vector<int> alloc_info = allocation_info_;
-			splits_->resize(alloc_info[NodeCount]);
-			std::cout << "Resiing splits to " << alloc_info[NodeCount] << " splits\n";
 		} // buildTree()
 
 		void
@@ -431,7 +469,7 @@ namespace dyn_kd_tree_builder_detail
 
 			// find which nodes are here, and where each node's points begin and end
 			int unique_labels = thrust::unique_by_key_copy(
-					owners.begin(0), 
+					owners.begin(0),  // Effectively owners_x.begin()
 					owners.end(0), 
 					thrust::counting_iterator<int>(0), 
 					labelsUnique->begin(), 
@@ -441,15 +479,17 @@ namespace dyn_kd_tree_builder_detail
 			SetLeftAndRightAndAABB<T> s;
 				s.maxPoints = points.rows;
 				s.nElements = unique_labels;
-				s.nodes = thrust::raw_pointer_cast(splits.data());
-				s.counts = thrust::raw_pointer_cast(countsUnique->data());
-				s.labels = thrust::raw_pointer_cast(labelsUnique->data());
+				s.nodes = thrust::raw_pointer_cast(&(splits[0]));
+				s.counts = thrust::raw_pointer_cast(&((*countsUnique)[0]));
+				s.labels = thrust::raw_pointer_cast(&((*labelsUnique)[0]));
 				s.points_ = points;
 				s.indecies_ = index;
 				s.aabbMin = aabbMin;
 				s.aabbMax = aabbMax;
+				s.splitSize = splits.size();
 
 			thrust::counting_iterator<int> it(0);
+			std::cout << "Unique labels: " << unique_labels << std::endl;
 			thrust::for_each(it, it + unique_labels, s);
 		} // update_leftright_and_aabb
 
@@ -505,10 +545,6 @@ namespace dyn_kd_tree_builder_detail
 
 		} // resize_node_vector
 
-
-
-
-	
 		flann::cuda::DeviceMatrix<float> points_;
 		// tree data, those are stored per-node
 

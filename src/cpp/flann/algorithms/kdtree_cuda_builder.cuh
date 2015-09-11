@@ -484,9 +484,25 @@ public:
             sn.splits=thrust::raw_pointer_cast(&(*splits_)[0]);
 
             thrust::counting_iterator<int> cit(0);
-            thrust::for_each( thrust::make_zip_iterator(thrust::make_tuple( parent_->begin(), child1_->begin(),  splits_->begin(), aabb_min_->begin(), aabb_max_->begin(), cit  )),
-                              thrust::make_zip_iterator(thrust::make_tuple( parent_->begin()+last_node_count, child1_->begin()+last_node_count,splits_->begin()+last_node_count, aabb_min_->begin()+last_node_count, aabb_max_->begin()+last_node_count,cit+last_node_count  )),
-                              sn   );
+            thrust::for_each( 
+				thrust::make_zip_iterator(
+					thrust::make_tuple( 
+						parent_->begin(), 
+						child1_->begin(),  
+						splits_->begin(), 
+						aabb_min_->begin(), 
+						aabb_max_->begin(), 
+						cit  )),
+                thrust::make_zip_iterator(
+					thrust::make_tuple( 
+						parent_->begin()+last_node_count, 
+						child1_->begin()+last_node_count,
+						splits_->begin()+last_node_count, 
+						aabb_min_->begin()+last_node_count, 
+						aabb_max_->begin()+last_node_count,
+						cit+last_node_count  )),
+                sn   );
+
             // copy allocation info to host
             thrust::host_vector<int> alloc_info = allocation_info_;
 
@@ -509,32 +525,34 @@ public:
             #endif
 
             // foreach point: point was in node that was split?move it to child (leaf) node : do nothing
-            cuda::kd_tree_builder_detail::MovePointsToChildNodes sno( thrust::raw_pointer_cast(&(*child1_)[0]),
-                                                                      thrust::raw_pointer_cast(&(*splits_)[0]),
-                                                                      thrust::raw_pointer_cast(&(*points_x_)[0]),
-                                                                      thrust::raw_pointer_cast(&(*points_y_)[0]),
-                                                                      thrust::raw_pointer_cast(&(*points_z_)[0]),
-                                                                      thrust::raw_pointer_cast(&(*owners_x_)[0]),
-                                                                      thrust::raw_pointer_cast(&(*owners_y_)[0]),
-                                                                      thrust::raw_pointer_cast(&(*owners_z_)[0]),
-                                                                      thrust::raw_pointer_cast(&(*leftright_x_)[0]),
-                                                                      thrust::raw_pointer_cast(&(*leftright_y_)[0]),
-                                                                      thrust::raw_pointer_cast(&(*leftright_z_)[0])
-                                                                      );
+            cuda::kd_tree_builder_detail::MovePointsToChildNodes sno( 
+				thrust::raw_pointer_cast(&(*child1_)[0]),
+				thrust::raw_pointer_cast(&(*splits_)[0]),
+				thrust::raw_pointer_cast(&(*points_x_)[0]),
+				thrust::raw_pointer_cast(&(*points_y_)[0]),
+				thrust::raw_pointer_cast(&(*points_z_)[0]),
+				thrust::raw_pointer_cast(&(*owners_x_)[0]),
+				thrust::raw_pointer_cast(&(*owners_y_)[0]),
+				thrust::raw_pointer_cast(&(*owners_z_)[0]),
+				thrust::raw_pointer_cast(&(*leftright_x_)[0]),
+				thrust::raw_pointer_cast(&(*leftright_y_)[0]),
+				thrust::raw_pointer_cast(&(*leftright_z_)[0])
+				);
             thrust::counting_iterator<int> ci0(0);
-            thrust::for_each( thrust::make_zip_iterator( 
-								thrust::make_tuple( 
-									ci0, 
-									index_x_->begin(), 
-									index_y_->begin(), 
-									index_z_->begin()) ),
-                              thrust::make_zip_iterator( 
-								thrust::make_tuple( 
-									ci0+points_->size(), 
-									index_x_->end(), 
-									index_y_->end(), 
-									index_z_->end()) ),
-							sno  );
+            thrust::for_each( 
+				thrust::make_zip_iterator( 
+					thrust::make_tuple( 
+						ci0, 
+						index_x_->begin(), 
+						index_y_->begin(), 
+						index_z_->begin()) ),
+                thrust::make_zip_iterator( 
+					thrust::make_tuple( 
+						ci0+points_->size(), 
+						index_x_->end(), 
+						index_y_->end(), 
+						index_z_->end()) ),
+				sno  );
 
             #ifdef PRINT_DEBUG_TIMING
             cudaDeviceSynchronize();
@@ -579,30 +597,36 @@ protected:
     update_leftright_and_aabb( const thrust::device_vector<float>& x, const thrust::device_vector<float>& y,const thrust::device_vector<float>& z,
                                const thrust::device_vector<int>& ix, const thrust::device_vector<int>& iy,const thrust::device_vector<int>& iz,
                                const thrust::device_vector<int>& owners,
-                               thrust::device_vector<cuda::kd_tree_builder_detail::SplitInfo>& splits, thrust::device_vector<float4>& aabbMin,thrust::device_vector<float4>& aabbMax)
+                               thrust::device_vector<cuda::kd_tree_builder_detail::SplitInfo>& splits, 
+							   thrust::device_vector<float4>& aabbMin,thrust::device_vector<float4>& aabbMax)
     {
         thrust::device_vector<int>* labelsUnique=tmp_owners_;
         thrust::device_vector<int>* countsUnique=tmp_index_;
 		// assume: points of each node are continuous in the array
 		
 		// find which nodes are here, and where each node's points begin and end
-        int unique_labels = thrust::unique_by_key_copy( owners.begin(), owners.end(), thrust::counting_iterator<int>(0), labelsUnique->begin(), countsUnique->begin()).first - labelsUnique->begin();
+        int unique_labels = thrust::unique_by_key_copy( 
+			owners.begin(), 
+			owners.end(), 
+			thrust::counting_iterator<int>(0), 
+			labelsUnique->begin(), 
+			countsUnique->begin()).first - labelsUnique->begin();
 
 		// update the info
         cuda::kd_tree_builder_detail::SetLeftAndRightAndAABB s;
-        s.maxPoints=x.size();
-        s.nElements=unique_labels;
-        s.nodes=thrust::raw_pointer_cast(&(splits[0]));
-        s.counts=thrust::raw_pointer_cast(&( (*countsUnique)[0]));
-        s.labels=thrust::raw_pointer_cast(&( (*labelsUnique)[0]));
-        s.x=thrust::raw_pointer_cast(&x[0]);
-        s.y=thrust::raw_pointer_cast(&y[0]);
-        s.z=thrust::raw_pointer_cast(&z[0]);
-        s.ix=thrust::raw_pointer_cast(&ix[0]);
-        s.iy=thrust::raw_pointer_cast(&iy[0]);
-        s.iz=thrust::raw_pointer_cast(&iz[0]);
-        s.aabbMin=thrust::raw_pointer_cast(&aabbMin[0]);
-        s.aabbMax=thrust::raw_pointer_cast(&aabbMax[0]);
+			s.maxPoints=x.size();
+			s.nElements=unique_labels;
+			s.nodes=thrust::raw_pointer_cast(&(splits[0]));
+			s.counts=thrust::raw_pointer_cast(&( (*countsUnique)[0]));
+			s.labels=thrust::raw_pointer_cast(&( (*labelsUnique)[0]));
+			s.x=thrust::raw_pointer_cast(&x[0]);
+			s.y=thrust::raw_pointer_cast(&y[0]);
+			s.z=thrust::raw_pointer_cast(&z[0]);
+			s.ix=thrust::raw_pointer_cast(&ix[0]);
+			s.iy=thrust::raw_pointer_cast(&iy[0]);
+			s.iz=thrust::raw_pointer_cast(&iz[0]);
+			s.aabbMin=thrust::raw_pointer_cast(&aabbMin[0]);
+			s.aabbMax=thrust::raw_pointer_cast(&aabbMax[0]);
 
         thrust::counting_iterator<int> it(0);
         thrust::for_each(it, it+unique_labels, s);
