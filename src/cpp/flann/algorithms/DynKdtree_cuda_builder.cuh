@@ -234,6 +234,10 @@ namespace dyn_kd_tree_builder_detail
 						maxDimLength = val;
 					}
 				}
+				if (maxDim > 3)
+				{
+					printf("Max dim > 3");
+				}
 				s.split_dim = maxDim;
 				s.split_val = (aabbMax[maxDim] + aabbMin[maxDim])*0.5f; 
 
@@ -266,8 +270,10 @@ namespace dyn_kd_tree_builder_detail
 			parent_.reset(new thrust::device_vector<int>(prealloc, -1));
 
 			cuda::kd_tree_builder_detail::SplitInfo s;
-			s.left = 0;
-			s.right = 0;
+				s.left = 0;
+				s.right = 0;
+				s.split_dim = -1;
+				s.split_val = 0;
 			splits_.reset(new thrust::device_vector<cuda::kd_tree_builder_detail::SplitInfo>(prealloc, s));
 			s.right = points.rows;
 			(*splits_)[0] = s;
@@ -316,16 +322,27 @@ namespace dyn_kd_tree_builder_detail
 			int last_node_count = 0;
 			for (int i = 0;; i++)
 			{
+				thrust::host_vector<cuda::kd_tree_builder_detail::SplitInfo> h_splits = *splits_;
+				int count = 0;
+				int index = 0;
+				for (auto itr = h_splits.begin(); itr != h_splits.end(); ++itr, ++index)
+				{
+					if ((*itr).split_dim > 3 && count < 100)
+						std::cout << "Iteration: " << i << " Invalid split " << ++count << " at index: " << index << std::endl;
+
+				}
+
+
 				SplitNodes<T> sn;
 					sn.maxPointsPerNode = max_leaf_size_;
-					sn.node_count = thrust::raw_pointer_cast(allocation_info_.data() + NodeCount);
-					sn.nodes_allocated = thrust::raw_pointer_cast(allocation_info_.data() + NodesAllocated);
-					sn.out_of_space = thrust::raw_pointer_cast(allocation_info_.data() + OutOfSpace);
-					sn.child1_ = thrust::raw_pointer_cast(child1_->data());
-					sn.parent_ = thrust::raw_pointer_cast(parent_->data());
-					sn.splits = thrust::raw_pointer_cast(splits_->data());
+					sn.node_count = thrust::raw_pointer_cast(&allocation_info_[NodeCount]);
+					sn.nodes_allocated = thrust::raw_pointer_cast(&allocation_info_[NodesAllocated]);
+					sn.out_of_space = thrust::raw_pointer_cast(&allocation_info_[OutOfSpace]);
+					sn.child1_ = thrust::raw_pointer_cast(&(*child1_)[0]);
+					sn.parent_ = thrust::raw_pointer_cast(&(*parent_)[0]);
+					sn.splits = thrust::raw_pointer_cast(&(*splits_)[0]);
 					sn.D = points_.cols;
-
+				
 				thrust::counting_iterator<int> cit(0);
 				thrust::for_each(
 					thrust::make_zip_iterator(
@@ -394,6 +411,9 @@ namespace dyn_kd_tree_builder_detail
 				}
 				update_leftright_and_aabb(points_, index_, owners_, *splits_, aabb_min_, aabb_max_);
 			}
+			thrust::host_vector<int> alloc_info = allocation_info_;
+			splits_->resize(alloc_info[NodeCount]);
+			std::cout << "Resiing splits to " << alloc_info[NodeCount] << " splits\n";
 		} // buildTree()
 
 		void
@@ -482,6 +502,7 @@ namespace dyn_kd_tree_builder_detail
 			d_aabb_max_->insert(d_aabb_max_->end(), add*points_.cols, f);
 			aabb_min_ = flann::cuda::DeviceMatrix<T>(thrust::raw_pointer_cast(d_aabb_min_->data()), add, points_.cols);
 			aabb_max_ = flann::cuda::DeviceMatrix<T>(thrust::raw_pointer_cast(d_aabb_max_->data()), add, points_.cols);
+
 		} // resize_node_vector
 
 

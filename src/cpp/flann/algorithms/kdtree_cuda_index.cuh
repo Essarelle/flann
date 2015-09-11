@@ -33,6 +33,7 @@ namespace flann
 			cuda::DeviceMatrix<T>& elements,
 			T* q,
 			GPUResultSet& result, 
+			int nodes,
 			const Distance& distance = Distance())
 		{
 			const int D = elements.cols;
@@ -48,7 +49,8 @@ namespace flann
 				split = splits[current];
 				if (split.split_dim > D || split.split_dim == -1)
 				{
-					printf("Invalid split %d\n", split.split_dim);
+					//printf("Invalid split %d at index: %d\n", split.split_dim, current);
+					break;
 				}
 				T diff1;
 				diff1 = q[split.split_dim] - split.split_val;
@@ -81,11 +83,19 @@ namespace flann
 						backtrack = true;
 						lastNode = current;
 						current = parent[current];
+						if (current >= nodes)
+						{
+							printf("%d Current > nodes %d %d\n", __LINE__, current, nodes);
+						}
 					}
 					else 
 					{ // go to closer child node
 						lastNode = current;
 						current = bestChild;
+						if (current >= nodes)
+						{
+							printf("%d Current > nodes %d %d\n", __LINE__, current, nodes);
+						}
 					}
 				}
 				else 
@@ -114,11 +124,19 @@ namespace flann
 						lastNode = current;
 						current = otherChild;
 						backtrack = false;
+						if (current >= nodes)
+						{
+							printf("%d Current > nodes %d %d\n", __LINE__, current, nodes);
+						}
 					}
 					else 
 					{
 						lastNode = current;
 						current = parent[current];
+						if (current >= nodes)
+						{
+							printf("%d Current > nodes %d %d\n", __LINE__, current, nodes);
+						}
 					}
 				}
 			}
@@ -135,7 +153,7 @@ namespace flann
 			cuda::DeviceMatrix<T> query,
 			cuda::DeviceMatrix<int> resultIdx,
 			cuda::DeviceMatrix<T> resultDist,
-			GPUResultSet result, Distance dist = Distance(), bool useShared = true)
+			GPUResultSet result, int nodes, Distance dist = Distance(), bool useShared = true)
 		{
 			typedef T DistanceType;
 			typedef T ElementType;
@@ -164,7 +182,7 @@ namespace flann
 			result.setResultLocation(thrust::raw_pointer_cast(resultDist.ptr()),
 				thrust::raw_pointer_cast(resultIdx.ptr()), tid, resultDist.stride / sizeof(T));
 
-			searchNeighbors(splits, child1, parent, aabbMin, aabbMax, elements, myQuery, result, dist);
+			searchNeighbors(splits, child1, parent, aabbMin, aabbMax, elements, myQuery, result, nodes, dist);
 
 			result.finish();
 		}
@@ -340,6 +358,7 @@ namespace flann
 			if (knn == 1)
 			{
 				size_t sharedMem = 512 * queries.cols * sizeof(ElementType);
+				sharedMem = 0;
 				cudaDeviceProp properties;
 				int device;
 				cudaGetDevice(&device);
@@ -357,7 +376,8 @@ namespace flann
 					queries,
 					indices,
 					dists,
-					flann::cuda::SingleResultSet<float>(epsError), distance, sharedMem != 0);
+					flann::cuda::SingleResultSet<float>(epsError),
+					gpu_helper_->gpu_splits_->size(), distance, sharedMem != 0);
 			}
 			else
 			{
@@ -374,6 +394,7 @@ namespace flann
 						indices,
 						dists, 
 						flann::cuda::KnnResultSet<float, true>(knn, sorted, epsError), 
+						gpu_helper_->gpu_splits_->size(),
 						distance);
 				}
 				else
@@ -388,6 +409,7 @@ namespace flann
 						queries,
 						indices,
 						dists, flann::cuda::KnnResultSet<float, false>(knn, sorted, epsError),
+						gpu_helper_->gpu_splits_->size(),
 						distance
 						);
 				}
@@ -432,6 +454,7 @@ namespace flann
 					indices,
 					dists,
 					flann::cuda::CountingRadiusResultSet<float>(radius, -1),
+					gpu_helper_->gpu_splits_->size(),
 					distance
 					);
 				//thrust::copy(thrust::system::cuda::par.on(stream), indicesDev.begin(), indicesDev.end(), indices.ptr());
@@ -453,7 +476,8 @@ namespace flann
 					queries,
 					indices,
 					dists,
-					flann::cuda::KnnRadiusResultSet<float, true>(max_neighbors, sorted, epsError, radius), 
+					flann::cuda::KnnRadiusResultSet<float, true>(max_neighbors, sorted, epsError, radius),
+					gpu_helper_->gpu_splits_->size(),
 					distance);
 			}
 			else {
@@ -467,7 +491,8 @@ namespace flann
 					queries,
 					indices,
 					dists, 
-					flann::cuda::KnnRadiusResultSet<float, false>(max_neighbors, sorted, epsError, radius), 
+					flann::cuda::KnnRadiusResultSet<float, false>(max_neighbors, sorted, epsError, radius),
+					gpu_helper_->gpu_splits_->size(),
 					distance);
 			}
 
@@ -552,9 +577,15 @@ namespace flann
 			gpu_helper_->d_gpu_aabb_max_ = builder.d_aabb_max_;
 			gpu_helper_->d_gpu_aabb_min_ = builder.d_aabb_min_;
 			thrust::host_vector<cuda::kd_tree_builder_detail::SplitInfo> h_splits = *builder.splits_;
-			for (auto itr = h_splits.begin(); itr != h_splits.end(); ++itr)
+			int count = 0;
+			int count2 = 0;
+			for (auto itr = h_splits.begin(); itr != h_splits.end(); ++itr, ++count2)
 			{
-				std::cout << (*itr).left << " " << (*itr).right << " " << (*itr).split_dim << std::endl;
+				if (((*itr).split_dim > 3 || (*itr).split_dim == -1) && count < 100)
+				{
+					std::cout << "Invalid split dimension: " << ++count << " at index: " << count2 << " " << (*itr).split_dim << std::endl;
+				}
+					
 			}
 			gpu_helper_->gpu_child1_ = builder.child1_;
 			gpu_helper_->gpu_parent_ = builder.parent_;
