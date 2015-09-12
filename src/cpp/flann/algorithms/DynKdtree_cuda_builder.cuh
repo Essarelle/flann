@@ -272,8 +272,6 @@ namespace dyn_kd_tree_builder_detail
 			cuda::kd_tree_builder_detail::SplitInfo s;
 				s.left = 0;
 				s.right = 0;
-				s.split_dim = -1;
-				s.split_val = 0;
 			splits_.reset(new thrust::device_vector<cuda::kd_tree_builder_detail::SplitInfo>(prealloc, s));
 			s.right = points.rows;
 			(*splits_)[0] = s;
@@ -327,7 +325,7 @@ namespace dyn_kd_tree_builder_detail
 			int last_node_count = 0;
 			for (int i = 0;; i++)
 			{
-				thrust::host_vector<cuda::kd_tree_builder_detail::SplitInfo> h_splits = *splits_;
+				/*thrust::host_vector<cuda::kd_tree_builder_detail::SplitInfo> h_splits = *splits_;
 				int count = 0;
 				int index = 0;
 				for (auto itr = h_splits.begin(); itr != h_splits.end(); ++itr, ++index)
@@ -335,7 +333,7 @@ namespace dyn_kd_tree_builder_detail
 					if ((*itr).split_dim > 3 && count < 3)
 						std::cout << "0-Iteration: " << i << " Invalid split " << ++count << " at index: " << index << std::endl;
 
-				}
+				}*/
 
 
 				SplitNodes<T> sn;
@@ -367,7 +365,7 @@ namespace dyn_kd_tree_builder_detail
 							aabb_max_.begin(0) + last_node_count,
 							cit + last_node_count)),
 					sn);
-				h_splits = *splits_;
+				/*h_splits = *splits_;
 				count = 0;
 				index = 0;
 				for (auto itr = h_splits.begin(); itr != h_splits.end(); ++itr, ++index)
@@ -375,7 +373,7 @@ namespace dyn_kd_tree_builder_detail
 					if ((*itr).split_dim > 3 && count < 3)
 						std::cout << "1-Iteration: " << i << " Invalid split " << ++count << " at index: " << index << std::endl;
 
-				}
+				}*/
 				// Get the allocation information from the run
 				thrust::host_vector<int> alloc_info = allocation_info_;
 
@@ -416,7 +414,7 @@ namespace dyn_kd_tree_builder_detail
 							ci0 + points_.rows,
 							index_.end(0))),
 					sno);
-				h_splits = *splits_;
+				/*h_splits = *splits_;
 				count = 0;
 				index = 0;
 				for (auto itr = h_splits.begin(); itr != h_splits.end(); ++itr, ++index)
@@ -424,7 +422,7 @@ namespace dyn_kd_tree_builder_detail
 					if ((*itr).split_dim > 3 && count < 3)
 						std::cout << "2-Iteration: " << i << " Invalid split " << ++count << " at index: " << index << std::endl;
 
-				}
+				}*/
 				
 				for (int d = 0; d < points_.cols; ++d)
 				{
@@ -432,7 +430,7 @@ namespace dyn_kd_tree_builder_detail
 					thrust::copy(tmp_index_->begin(), tmp_index_->end(), index_.begin(d));
 					thrust::copy(tmp_owners_->begin(), tmp_owners_->end(), owners_.begin(d));
 				}
-				h_splits = *splits_;
+				/*h_splits = *splits_;
 				count = 0;
 				index = 0;
 				for (auto itr = h_splits.begin(); itr != h_splits.end(); ++itr, ++index)
@@ -440,9 +438,9 @@ namespace dyn_kd_tree_builder_detail
 					if ((*itr).split_dim > 3 && count < 3)
 						std::cout << "3-Iteration: " << i << " Invalid split " << ++count << " at index: " << index << std::endl;
 
-				}
+				}*/
 				update_leftright_and_aabb(points_, index_, owners_, *splits_, aabb_min_, aabb_max_);
-				h_splits = *splits_;
+				/*h_splits = *splits_;
 				count = 0;
 				index = 0;
 				for (auto itr = h_splits.begin(); itr != h_splits.end(); ++itr, ++index)
@@ -450,7 +448,7 @@ namespace dyn_kd_tree_builder_detail
 					if ((*itr).split_dim > 3 && count < 3)
 						std::cout << "4-Iteration: " << i << " Invalid split " << ++count << " at index: " << index << std::endl;
 
-				}
+				}*/
 			}
 		} // buildTree()
 
@@ -466,6 +464,23 @@ namespace dyn_kd_tree_builder_detail
 			thrust::device_vector<int>* labelsUnique = tmp_owners_.get();
 			thrust::device_vector<int>* countsUnique = tmp_index_.get();
 			// assume: points of each node are continuous in the array
+
+			/*cv::cuda::GpuMat d_labels(labelsUnique->size(), 1, CV_32S, thrust::raw_pointer_cast(labelsUnique->data()));
+			cv::cuda::GpuMat d_counts(countsUnique->size(), 1, CV_32S, thrust::raw_pointer_cast(countsUnique->data()));
+			cv::cuda::GpuMat d_owners(owners.rows, owners.cols, CV_32S, (void*)thrust::raw_pointer_cast(owners.ptr()), owners.stride);
+			cv::cuda::GpuMat d_points(points.rows, points.cols, CV_32F, (void*)thrust::raw_pointer_cast(points.ptr()), points.stride);
+			cv::cuda::GpuMat d_splits(splits.size(), 2, CV_32S, (void*)thrust::raw_pointer_cast(splits.data()), sizeof(cuda::kd_tree_builder_detail::SplitInfo));
+			cv::cuda::GpuMat d_aabbMin(aabbMin.rows, aabbMin.cols, CV_32F, (void*)thrust::raw_pointer_cast(aabbMin.ptr()), aabbMin.stride);
+			cv::cuda::GpuMat d_aabbMax(aabbMax.rows, aabbMax.cols, CV_32F, (void*)thrust::raw_pointer_cast(aabbMax.ptr()), aabbMax.stride);
+
+
+			cv::Mat h_labels(d_labels);
+			cv::Mat h_counts(d_counts);
+			cv::Mat h_points(d_points);
+			cv::Mat h_splits(d_splits);
+			cv::Mat h_owners(d_owners);
+			cv::Mat h_aabbMin(d_aabbMin);
+			cv::Mat h_aabbMax(d_aabbMax);*/
 
 			// find which nodes are here, and where each node's points begin and end
 			int unique_labels = thrust::unique_by_key_copy(
@@ -489,7 +504,7 @@ namespace dyn_kd_tree_builder_detail
 				s.splitSize = splits.size();
 
 			thrust::counting_iterator<int> it(0);
-			std::cout << "Unique labels: " << unique_labels << std::endl;
+			//std::cout << "Unique labels: " << unique_labels << std::endl;
 			thrust::for_each(it, it + unique_labels, s);
 		} // update_leftright_and_aabb
 
@@ -534,8 +549,6 @@ namespace dyn_kd_tree_builder_detail
 			cuda::kd_tree_builder_detail::SplitInfo s;
 				s.left = 0;
 				s.right = 0;
-				s.split_dim = -1;
-				s.split_val = 0;
 			splits_->insert(splits_->end(), add, s);
 			float f;
 			d_aabb_min_->insert(d_aabb_min_->end(), add*points_.cols, f);

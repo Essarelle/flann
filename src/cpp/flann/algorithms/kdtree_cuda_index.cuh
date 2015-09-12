@@ -1,4 +1,8 @@
 #pragma once
+
+
+#include <opencv2/core/cuda.hpp>
+#include <thrust/system/cuda/execution_policy.h>
 #include <flann/algorithms/DynKdtree_cuda_builder.cuh>
 #include <flann/util/DeviceMatrix.h>
 #include <flann/algorithms/kdtree_cuda_3d_index.h> // For params class
@@ -47,11 +51,6 @@ namespace flann
 				if (current == -1) 
 					break;
 				split = splits[current];
-				if (split.split_dim > D || split.split_dim == -1)
-				{
-					//printf("Invalid split %d at index: %d\n", split.split_dim, current);
-					break;
-				}
 				T diff1;
 				diff1 = q[split.split_dim] - split.split_val;
 				
