@@ -6,7 +6,7 @@ configure_file(${CMAKE_CURRENT_SOURCE_DIR}/flann/config.h.in ${CMAKE_CURRENT_SOU
 
 file(GLOB_RECURSE C_SOURCES flann.cpp lz4.c lz4hc.c)
 file(GLOB_RECURSE CPP_SOURCES flann_cpp.cpp lz4.c lz4hc.c)
-file(GLOB_RECURSE CU_SOURCES *.cu)
+file(GLOB_RECURSE CU_SOURCES *.cu *.cuh)
 
 add_library(flann_cpp_s STATIC ${CPP_SOURCES})
 if(CMAKE_COMPILER_IS_GNUCC OR CMAKE_COMPILER_IS_CLANG)
