@@ -558,7 +558,7 @@ namespace dyn_kd_tree_builder_detail
 
 		} // resize_node_vector
 
-		flann::cuda::DeviceMatrix<float> points_;
+		flann::cuda::DeviceMatrix<T> points_;
 		// tree data, those are stored per-node
 
 		//! left child of each node. (right child==left child + 1, due to the alloc mechanism)

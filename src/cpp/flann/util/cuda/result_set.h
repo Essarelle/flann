@@ -58,7 +58,7 @@ struct SingleResultSet
     SingleResultSet( DistanceType eps ) : bestIndex(-1),bestDist(INFINITY), epsError(eps){ }
 
     __device__
-    inline float
+    inline DistanceType
     worstDist()
     {
         return bestDist;
@@ -74,12 +74,12 @@ struct SingleResultSet
         }
     }
 
-    DistanceType* resultDist;
+	Accumulator<DistanceType>::Type* resultDist;
     int* resultIndex;
 
     __device__
     inline void
-    setResultLocation( DistanceType* dists, int* index, int thread, int stride )
+	setResultLocation(Accumulator<DistanceType>::Type* dists, int* index, int thread, int stride)
     {
         resultDist=dists+thread*stride;
         resultIndex=index+thread*stride;
@@ -197,12 +197,12 @@ struct KnnResultSet
             }
     }
 
-	DistanceType* resultDist;
+	Accumulator<DistanceType>::Type* resultDist;
     int* resultIndex;
 
     __device__
     inline void
-    setResultLocation( DistanceType* dists, int* index, int thread, int stride )
+    setResultLocation( Accumulator<DistanceType>::Type* dists, int* index, int thread, int stride )
     {
         resultDist=dists+stride*thread;
         resultIndex=index+stride*thread;
@@ -252,7 +252,7 @@ struct CountingRadiusResultSet
 
     __device__
     inline void
-    insert(int index, float dist)
+    insert(int index, DistanceType dist)
     {
         if( dist < radius_sq_ ) {
             count_++;
@@ -263,7 +263,7 @@ struct CountingRadiusResultSet
 
     __device__
     inline void
-    setResultLocation( DistanceType* /*dists*/, int* count, int thread, int stride )
+	setResultLocation(Accumulator<DistanceType>::Type* /*dists*/, int* count, int thread, int stride)
     {
         resultIndex=count+thread*stride;
     }
@@ -353,12 +353,12 @@ struct RadiusKnnResultSet
     }
 
 
-    DistanceType* resultDist;
+	Accumulator<DistanceType>::Type* resultDist;
     int* resultIndex;
 
     __device__
     inline void
-    setResultLocation( DistanceType* dists, int* index, int thread, int /*stride*/ )
+	setResultLocation(Accumulator<DistanceType>::Type* dists, int* index, int thread, int /*stride*/)
     {
         resultDist=dists+segment_starts_[thread];
         resultIndex=index+segment_starts_[thread];
@@ -452,12 +452,12 @@ struct KnnRadiusResultSet
             }
     }
 
-    DistanceType* resultDist;
+	Accumulator<DistanceType>::Type* resultDist;
     int* resultIndex;
 
     __device__
     inline void
-    setResultLocation( DistanceType* dists, int* index, int thread, int stride )
+	setResultLocation(Accumulator<DistanceType>::Type* dists, int* index, int thread, int stride)
     {
         resultDist=dists+stride*thread;
         resultIndex=index+stride*thread;
@@ -517,11 +517,11 @@ struct RadiusResultSet
     }
 
     int* resultIndex;
-    DistanceType* resultDist;
+	Accumulator<DistanceType>::Type* resultDist;
 
     __device__
     inline void
-    setResultLocation( DistanceType* dists, int* index, int thread, int /*stride*/ )
+	setResultLocation(Accumulator<DistanceType>::Type* dists, int* index, int thread, int /*stride*/)
     {
         resultIndex=index+segment_starts_[thread];
         resultDist=dists+segment_starts_[thread];

@@ -24,8 +24,10 @@ if (BUILD_CUDA_LIB)
     else()
 	    set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS};-arch=sm_35" )
     endif()
+	
     cuda_add_library(flann_cuda_s STATIC ${CU_SOURCES})
     set_property(TARGET flann_cuda_s PROPERTY COMPILE_DEFINITIONS FLANN_STATIC)
+	LIST(APPEND CMAKE_CXX_FLAGS "/bigobj")
 endif()
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_COMPILER_IS_GNUCC)
