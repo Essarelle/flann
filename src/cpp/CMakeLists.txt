@@ -6,7 +6,8 @@ configure_file(${CMAKE_CURRENT_SOURCE_DIR}/flann/config.h.in ${CMAKE_CURRENT_SOU
 
 file(GLOB_RECURSE C_SOURCES flann.cpp lz4.c lz4hc.c)
 file(GLOB_RECURSE CPP_SOURCES flann_cpp.cpp lz4.c lz4hc.c)
-file(GLOB_RECURSE CU_SOURCES *.cu *.cuh)
+file(GLOB_RECURSE CU_SOURCES "*.cu" "*.cuh")
+file(GLOB_RECURSE HEADERS "*.h")
 
 add_library(flann_cpp_s STATIC ${CPP_SOURCES})
 if(CMAKE_COMPILER_IS_GNUCC OR CMAKE_COMPILER_IS_CLANG)
@@ -25,9 +26,11 @@ if (BUILD_CUDA_LIB)
 	    set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS};-arch=sm_35" )
     endif()
 	
-    cuda_add_library(flann_cuda_s STATIC ${CU_SOURCES})
+    cuda_add_library(flann_cuda_s STATIC ${CU_SOURCES} ${HEADERS})
     set_property(TARGET flann_cuda_s PROPERTY COMPILE_DEFINITIONS FLANN_STATIC)
-	LIST(APPEND CMAKE_CXX_FLAGS "/bigobj")
+    IF(WIN32)
+        LIST(APPEND CMAKE_CXX_FLAGS "/bigobj")
+    ENDIF(WIN32)
 endif()
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_COMPILER_IS_GNUCC)

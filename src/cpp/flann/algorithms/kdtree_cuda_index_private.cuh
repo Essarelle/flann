@@ -2,11 +2,11 @@
 #include "kdtree_cuda_index_impl.cuh"
 using namespace flann;
 
-template<typename Distance> DynGpuIndex<Distance>::DynGpuIndex(const IndexParams& params, Distance distance = Distance())
+template<typename Distance> DynGpuIndex<Distance>::DynGpuIndex(const IndexParams& params, Distance distance)
 {
 	index_params_ = params;
 }
-template<typename Distance> DynGpuIndex<Distance>::DynGpuIndex(cuda::DeviceMatrix<ElementType> features, const IndexParams& params, Distance distance = Distance())
+template<typename Distance> DynGpuIndex<Distance>::DynGpuIndex(cuda::DeviceMatrix<ElementType> features, const IndexParams& params, Distance distance)
 {
 	index_params_ = params;
 	nnIndex_.reset(new KDTreeCudaIndex<Distance>(features, params, distance));
@@ -24,7 +24,7 @@ template<typename Distance> int DynGpuIndex<Distance>::knnSearch(cuda::DeviceMat
 	cuda::DeviceMatrix<DistanceType>& dists,
 	size_t knn,
 	const SearchParams& params,
-	cudaStream_t stream = NULL) const
+    cudaStream_t stream) const
 {
 	nnIndex_->knnSearchGpu(queries, indices, dists, knn, params, stream);
 	return 0;
@@ -34,7 +34,7 @@ template<typename Distance>  int DynGpuIndex<Distance>::radiusSearch(cuda::Devic
 	cuda::DeviceMatrix<DistanceType>& dists,
 	float radius,
 	const SearchParams& params,
-	cudaStream_t stream = NULL) const
+    cudaStream_t stream) const
 {
 	return nnIndex_->radiusSearchGpu(queries, indices, dists, radius, params, stream);
 }

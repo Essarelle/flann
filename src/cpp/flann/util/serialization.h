@@ -8,6 +8,8 @@
 #include <stdio.h>
 #include "flann/ext/lz4.h"
 #include "flann/ext/lz4hc.h"
+#include "limits"
+
 
 
 namespace flann

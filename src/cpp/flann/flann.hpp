@@ -414,6 +414,9 @@ template<typename Distance>
 class GpuIndex: public Index<Distance>
 {
 public:
+    typedef typename Distance::ElementType ElementType;
+    typedef typename Distance::ResultType DistanceType;
+    typedef NNIndex<Distance> IndexType;
 
 	GpuIndex(const IndexParams& params, Distance distance = Distance())
 		: Index<Distance>(params, distance)
@@ -422,7 +425,7 @@ public:
 		Index<Distance>::loaded_ = false;
 		assert(index_type == FLANN_INDEX_KDTREE_CUDA);
 
-		Matrix<ElementType> features;
+        Matrix<ElementType> features;
 		if (index_type == FLANN_INDEX_SAVED) {
 			Index<Distance>::nnIndex_ = load_saved_index(features, get_param<std::string>(params, "filename"), distance);
 			Index<Distance>::loaded_ = true;
@@ -434,7 +437,7 @@ public:
 	}
 
 
-	GpuIndex(const Matrix<ElementType>& features, const IndexParams& params, Distance distance = Distance())
+    GpuIndex(const Matrix<ElementType>& features, const IndexParams& params, Distance distance = Distance())
 		: Index<Distance>(features,params,distance)
 	{
 		flann_algorithm_t index_type = get_param<flann_algorithm_t>(params, "algorithm");
@@ -449,9 +452,9 @@ public:
 			Index<Distance>::nnIndex_ = create_index_by_type<Distance>(index_type, features, params, distance);
 		}
 	}
-	virtual int knnSearch(const Matrix<ElementType>& queries,
+    virtual int knnSearch(const Matrix<ElementType>& queries,
 		Matrix<int>& indices,
-		Matrix<DistanceType>& dists,
+        Matrix<DistanceType>& dists,
 		size_t knn,
 		const SearchParams& params,
 		cudaStream_t stream = NULL) const
@@ -464,9 +467,10 @@ public:
 		}
 		return Index<Distance>::nnIndex_->knnSearch(queries, indices, dists, knn, params);
 	}
-	virtual int radiusSearch(const Matrix<ElementType>& queries,
+
+    virtual int radiusSearch(const Matrix<ElementType>& queries,
 		Matrix<int>& indices,
-		Matrix<DistanceType>& dists,
+        Matrix<DistanceType>& dists,
 		float radius,
 		const SearchParams& params,
 		cudaStream_t stream = NULL) const

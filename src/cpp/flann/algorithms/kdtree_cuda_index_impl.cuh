@@ -150,14 +150,14 @@ namespace flann
 			cuda::DeviceMatrix<T> elements,
 			cuda::DeviceMatrix<T> query,
 			cuda::DeviceMatrix<int> resultIdx,
-			cuda::DeviceMatrix<Distance::ResultType> resultDist,
+            cuda::DeviceMatrix<typename Distance::ResultType> resultDist,
 			GPUResultSet result, 
 			int nodes, 
 			Distance dist = Distance(), 
 			bool useShared = true)
 		{
-			typedef T DistanceType;
-			typedef T ElementType;
+            typedef T DistanceType;
+            typedef T ElementType;
 			size_t tid = blockDim.x*blockIdx.x + threadIdx.x;
 
 			extern __shared__ __align__(sizeof(T)) unsigned char my_smem[];
@@ -205,7 +205,7 @@ namespace flann
 	struct DynDistL2
 	{
 		//typedef T ResultType;
-		typedef L2<T>::ResultType ResultType;
+        typedef typename L2<T>::ResultType ResultType;
 		static ResultType __host__ __device__ axisDist(T a, T b)
 		{
 			return (a - b)*(a - b);
@@ -224,7 +224,7 @@ namespace flann
 	struct DynDistL1
 	{
 		//typedef T ResultType;
-		typedef L1<T>::ResultType ResultType;
+        typedef typename L1<T>::ResultType ResultType;
 		static ResultType __host__ __device__ axisDist(T a, T b)
 		{
 			return fabs(a - b);
@@ -241,7 +241,7 @@ namespace flann
 	};
 	template<typename T> struct DynDistL1<T, typename std::enable_if<std::is_integral<T>::value && !std::is_unsigned<T>::value, void>::type>
 	{
-		typedef L1<int>::ResultType ResultType;
+        typedef typename L1<int>::ResultType ResultType;
 		static ResultType __host__ __device__ axisDist(T a, T b)
 		{
 			return abs(a - b);
@@ -258,7 +258,7 @@ namespace flann
 	};
 	template<typename T> struct DynDistL1<T, typename std::enable_if<std::is_integral<T>::value && std::is_unsigned<T>::value, void>::type>
 	{
-		typedef L1<int>::ResultType ResultType;
+        typedef typename L1<int>::ResultType ResultType;
 		static ResultType __host__ __device__ axisDist(T a, T b)
 		{
 			return a - b;
@@ -276,7 +276,7 @@ namespace flann
 	template<typename T>
 	struct DynDistHamming
 	{
-		typedef HammingPopcnt<T>::ResultType ResultType;
+        typedef typename HammingPopcnt<T>::ResultType ResultType;
 		static T __host__ __device__ axisDist(T a, T b)
 		{
 			return a != b;
@@ -298,19 +298,19 @@ namespace flann
 	template<typename T>
 	struct DynGpuDist< L2<T> >
 	{
-		typedef DynDistL2<T> type;
+        typedef DynDistL2<T> type;
 	};
 
 	template<typename T>
 	struct DynGpuDist< L1<T> >
 	{
-		typedef DynDistL1<T> type;
+        typedef DynDistL1<T> type;
 	};
 
 	template<typename T>
 	struct DynGpuDist< HammingPopcnt<T> >
 	{
-		typedef DynDistHamming<T> type;
+        typedef DynDistHamming<T> type;
 	};
 
 
@@ -341,7 +341,7 @@ namespace flann
 	public:
 		typedef typename Distance::ElementType ElementType;
 		typedef typename Distance::ResultType DistanceType;
-		typedef NNIndex<Distance> BaseClass;
+        typedef NNIndex<Distance> BaseClass;
 
 		int visited_leafs;
 
@@ -411,8 +411,8 @@ namespace flann
 
 				DynKdTreeCudaPrivate::nearestKernel<
 					ElementType, 
-					flann::cuda::SingleResultSet<ElementType>, 
-					DynGpuDist<Distance>::type> 
+                    flann::cuda::SingleResultSet<ElementType>,
+                    typename DynGpuDist<Distance>::type>
 					<< <blocksPerGrid, threadsPerBlock, sharedMem, stream >> > (
 						thrust::raw_pointer_cast(&((*gpu_helper_->gpu_splits_)[0])),
 						thrust::raw_pointer_cast(&((*gpu_helper_->gpu_child1_)[0])),
@@ -423,7 +423,7 @@ namespace flann
 						queries,
 						indices,
 						dists,
-						flann::cuda::SingleResultSet<ElementType>(epsError),
+                        flann::cuda::SingleResultSet<ElementType>(epsError),
 						(int)gpu_helper_->gpu_splits_->size(), 
 						distance, 
 						sharedMem != 0);
@@ -442,7 +442,7 @@ namespace flann
 						queries,
 						indices,
 						dists,
-						flann::cuda::KnnResultSet<ElementType, true>(knn, sorted, epsError),
+                        flann::cuda::KnnResultSet<ElementType, true>(knn, sorted, epsError),
 						gpu_helper_->gpu_splits_->size(),
 						distance);
 				}
@@ -457,7 +457,7 @@ namespace flann
 						gpu_helper_->gpu_points_,
 						queries,
 						indices,
-						dists, flann::cuda::KnnResultSet<ElementType, false>(knn, sorted, epsError),
+                        dists, flann::cuda::KnnResultSet<ElementType, false>(knn, sorted, epsError),
 						gpu_helper_->gpu_splits_->size(),
 						distance
 						);

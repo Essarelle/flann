@@ -74,12 +74,12 @@ struct SingleResultSet
         }
     }
 
-	Accumulator<DistanceType>::Type* resultDist;
+    typename Accumulator<DistanceType>::Type* resultDist;
     int* resultIndex;
 
     __device__
     inline void
-	setResultLocation(Accumulator<DistanceType>::Type* dists, int* index, int thread, int stride)
+    setResultLocation(typename Accumulator<DistanceType>::Type* dists, int* index, int thread, int stride)
     {
         resultDist=dists+thread*stride;
         resultIndex=index+thread*stride;
@@ -197,12 +197,12 @@ struct KnnResultSet
             }
     }
 
-	Accumulator<DistanceType>::Type* resultDist;
+    typename Accumulator<DistanceType>::Type* resultDist;
     int* resultIndex;
 
     __device__
     inline void
-    setResultLocation( Accumulator<DistanceType>::Type* dists, int* index, int thread, int stride )
+    setResultLocation(typename Accumulator<DistanceType>::Type* dists, int* index, int thread, int stride )
     {
         resultDist=dists+stride*thread;
         resultIndex=index+stride*thread;
@@ -263,7 +263,7 @@ struct CountingRadiusResultSet
 
     __device__
     inline void
-	setResultLocation(Accumulator<DistanceType>::Type* /*dists*/, int* count, int thread, int stride)
+    setResultLocation(typename Accumulator<DistanceType>::Type* /*dists*/, int* count, int thread, int stride)
     {
         resultIndex=count+thread*stride;
     }
@@ -353,12 +353,12 @@ struct RadiusKnnResultSet
     }
 
 
-	Accumulator<DistanceType>::Type* resultDist;
+    typename Accumulator<DistanceType>::Type* resultDist;
     int* resultIndex;
 
     __device__
     inline void
-	setResultLocation(Accumulator<DistanceType>::Type* dists, int* index, int thread, int /*stride*/)
+    setResultLocation(typename Accumulator<DistanceType>::Type* dists, int* index, int thread, int /*stride*/)
     {
         resultDist=dists+segment_starts_[thread];
         resultIndex=index+segment_starts_[thread];
@@ -452,12 +452,12 @@ struct KnnRadiusResultSet
             }
     }
 
-	Accumulator<DistanceType>::Type* resultDist;
+    typename Accumulator<DistanceType>::Type* resultDist;
     int* resultIndex;
 
     __device__
     inline void
-	setResultLocation(Accumulator<DistanceType>::Type* dists, int* index, int thread, int stride)
+    setResultLocation(typename Accumulator<DistanceType>::Type* dists, int* index, int thread, int stride)
     {
         resultDist=dists+stride*thread;
         resultIndex=index+stride*thread;
@@ -517,11 +517,11 @@ struct RadiusResultSet
     }
 
     int* resultIndex;
-	Accumulator<DistanceType>::Type* resultDist;
+    typename Accumulator<DistanceType>::Type* resultDist;
 
     __device__
     inline void
-	setResultLocation(Accumulator<DistanceType>::Type* dists, int* index, int thread, int /*stride*/)
+    setResultLocation(typename Accumulator<DistanceType>::Type* dists, int* index, int thread, int /*stride*/)
     {
         resultIndex=index+segment_starts_[thread];
         resultDist=dists+segment_starts_[thread];
