@@ -55,8 +55,8 @@ namespace flann
 			__device__ __host__ DeviceMatrix(T* data_, size_t rows_, size_t cols_, size_t stride_ = 0) :
 				::flann::Matrix<T>(data_, rows_, cols_, stride_)
 			{
-                if (Matrix_::stride == 0)
-                    Matrix_::stride = sizeof(T)*Matrix_::cols;
+                if (this->stride == 0)
+                    this->stride = sizeof(T)*this->cols;
 			}
 			__device__ __host__ DeviceMatrix() : ::flann::Matrix<T>(){}
 
@@ -69,12 +69,12 @@ namespace flann
 			}
 			__forceinline__ __device__ __host__  thrust::device_ptr<T> operator[](size_t rowIndex) const
 			{
-                return thrust::device_pointer_cast(reinterpret_cast<T*>(Matrix_::data + rowIndex*Matrix_::stride));
+                return thrust::device_pointer_cast(reinterpret_cast<T*>(this->data + rowIndex*this->stride));
 			}
 
 			__forceinline__ __device__ __host__ thrust::device_ptr<T> ptr() const
 			{
-                return thrust::device_pointer_cast(reinterpret_cast<T*>(Matrix_::data));
+                return thrust::device_pointer_cast(reinterpret_cast<T*>(this->data));
 			}
 			__device__ __host__ iterator begin(int col = -1)
 			{
@@ -84,7 +84,7 @@ namespace flann
 						ptr(),
 						thrust::make_transform_iterator(
 						thrust::make_counting_iterator(size_t(0)),
-                        step_functor(Matrix_::cols, Matrix_::stride / sizeof(T))));
+                        step_functor(this->cols, this->stride / sizeof(T))));
 				}
 				else
 				{
@@ -92,19 +92,19 @@ namespace flann
 						ptr() + col,
 						thrust::make_transform_iterator(
 						thrust::make_counting_iterator(size_t(0)),
-                        step_functor(1, Matrix_::stride / sizeof(T))));
+                        step_functor(1, this->stride / sizeof(T))));
 				}
 			}
 			__device__ __host__ iterator end(int col = -1)
 			{
 				if (col == -1)
 				{
-                    size_t size = Matrix_::rows*Matrix_::cols;
+                    size_t size = this->rows*this->cols;
 					return thrust::make_permutation_iterator(
 						ptr(),
 						thrust::make_transform_iterator(
 						thrust::make_counting_iterator(size),
-                        step_functor(Matrix_::cols, Matrix_::stride / sizeof(T))));
+                        step_functor(this->cols, this->stride / sizeof(T))));
 				}
 				else
 				{
@@ -112,8 +112,8 @@ namespace flann
 					return thrust::make_permutation_iterator(
 						ptr() + col,
 						thrust::make_transform_iterator(
-                        thrust::make_counting_iterator(Matrix_::rows),
-                        step_functor(1, Matrix_::stride / sizeof(T))));
+                        thrust::make_counting_iterator(this->rows),
+                        step_functor(1, this->stride / sizeof(T))));
 				}
 			}
 
@@ -122,16 +122,16 @@ namespace flann
 				if (rowRange.start == -1)
 					rowRange.start = 0;
 				if (rowRange.end == -1)
-                    rowRange.end = Matrix_::rows;
+                    rowRange.end = this->rows;
 				if (colRange.start == -1)
 					colRange.start = 0;
 				if (colRange.end == -1)
-                    colRange.end = Matrix_::cols;
+                    colRange.end = this->cols;
 				return thrust::make_permutation_iterator(
 					operator[](rowRange.start) + colRange.start,
 					thrust::make_transform_iterator(
 					thrust::make_counting_iterator(0),
-                    step_functor(colRange.span(), Matrix_::stride / sizeof(T))));
+                    step_functor(colRange.span(), this->stride / sizeof(T))));
 			}
 
 			iterator end(Range rowRange, Range colRange = Range(-1, -1))
@@ -139,16 +139,16 @@ namespace flann
 				if (rowRange.start == -1)
 					rowRange.start = 0;
 				if (rowRange.end == -1)
-                    rowRange.end = Matrix_::rows;
+                    rowRange.end = this->rows;
 				if (colRange.start == -1)
 					colRange.start = 0;
 				if (colRange.end == -1)
-                    colRange.end = Matrix_::cols;
+                    colRange.end = this->cols;
 				return thrust::make_permutation_iterator(
 					operator[](rowRange.start) + colRange.start,
 					thrust::make_transform_iterator(
 					thrust::make_counting_iterator(colRange.span()*rowRange.span()),
-                    step_functor(colRange.span(), Matrix_::stride / sizeof(T))));
+                    step_functor(colRange.span(), this->stride / sizeof(T))));
 			}
 		}; // DeviceMatrix
 	} // namespace cuda
