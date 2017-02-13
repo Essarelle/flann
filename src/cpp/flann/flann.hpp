@@ -427,7 +427,7 @@ public:
 
         Matrix<ElementType> features;
 		if (index_type == FLANN_INDEX_SAVED) {
-			Index<Distance>::nnIndex_ = load_saved_index(features, get_param<std::string>(params, "filename"), distance);
+                        Index<Distance>::nnIndex_ = this->load_saved_index(features, get_param<std::string>(params, "filename"), distance);
 			Index<Distance>::loaded_ = true;
 		}
 		else {
@@ -444,7 +444,7 @@ public:
 		Index<Distance>::loaded_ = false;
 		assert(index_type == FLANN_INDEX_KDTREE_CUDA);
 		if (index_type == FLANN_INDEX_SAVED) {
-			Index<Distance>::nnIndex_ = load_saved_index(features, get_param<std::string>(params, "filename"), distance);
+                        Index<Distance>::nnIndex_ = this->load_saved_index(features, get_param<std::string>(params, "filename"), distance);
 			Index<Distance>::loaded_ = true;
 		}
 		else {
