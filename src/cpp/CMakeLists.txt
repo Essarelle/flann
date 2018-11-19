@@ -39,7 +39,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_COMPILER_IS_GNUCC)
     target_link_libraries(flann_cpp -Wl,-whole-archive flann_cpp_s -Wl,-no-whole-archive)
 
     if (BUILD_CUDA_LIB)
-	    cuda_add_library(flann_cuda SHARED "")
+	    cuda_add_library(flann_cuda SHARED "empty.cpp")
         set_target_properties(flann_cuda PROPERTIES LINKER_LANGUAGE CXX)
         target_link_libraries(flann_cuda -Wl,-whole-archive flann_cuda_s -Wl,-no-whole-archive)
         set_property(TARGET flann_cpp_s PROPERTY COMPILE_DEFINITIONS FLANN_USE_CUDA)
