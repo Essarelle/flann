@@ -33,6 +33,7 @@
 // #define THRUST_DEBUG 1
 #include <cuda.h>
 #include <thrust/copy.h>
+#include <thrust/gather.h>
 #include <thrust/device_vector.h>
 #include <thrust/system/cuda/execution_policy.h>
 //#include <thrust/execution_policy.h>
