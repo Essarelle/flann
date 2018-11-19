@@ -1,5 +1,6 @@
 #pragma once
 #include <thrust/system/cuda/execution_policy.h>
+#include <thrust/gather.h>
 #include <flann/algorithms/DynKdtree_cuda_builder.cuh>
 #include <flann/util/DeviceMatrix.h>
 #include <flann/algorithms/kdtree_cuda_3d_index.h> // For params class
